@@ -1,0 +1,16 @@
+services:
+  projecthub:
+    build: .
+    container_name: projecthub
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      # 生产环境请改成自己的管理员密码
+      # ADMIN_NICKNAME: "your-admin-name"
+      # ADMIN_PASSWORD: "your-strong-password"
+      # 需要接入大模型时再打开（示例：DeepSeek）
+      # DEEPSEEK_API_KEY: "sk-xxxx"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
