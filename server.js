@@ -384,6 +384,15 @@ function notifyOthers(topic, exceptUserId, payload) {
 }
 
 /* ---------- SSE 定向推送（按权限） ---------- */
+function auditDenied(user, topic, path) {
+  audit.log("permission_denied", {
+    actorId: user ? user.id : "",
+    actorName: user ? user.nickname : "",
+    topicId: topic ? topic.id : "",
+    path: path,
+    result: "deny"
+  });
+}
 function topicAudience(topic) { return topic.members.map((m) => m.id); }
 function broadcastTopic(topic, event, data) { sseHub.sendToUsers(topicAudience(topic), event, data); }
 function broadcastPing(event, data) { sseHub.sendToAllAuthed(event, data); }
@@ -1032,12 +1041,12 @@ async function handleApi(req, res, url) {
     return;
   }
   if (p1 === "admin" && parts[2] === "reports" && parts.length === 3 && m === "GET") {
-    if (!user || user.role !== "admin") { sendJson(res, 403, { error: "需要管理员权限" }); return; }
+    if (!user || user.role !== "admin") { auditDenied(user, null, "admin"); sendJson(res, 403, { error: "需要管理员权限" }); return; }
     sendJson(res, 200, { reports: db.reports.slice(0, 200) });
     return;
   }
   if (p1 === "admin" && parts[2] === "reports" && parts[4] === "resolve" && m === "POST") {
-    if (!user || user.role !== "admin") { sendJson(res, 403, { error: "需要管理员权限" }); return; }
+    if (!user || user.role !== "admin") { auditDenied(user, null, "admin"); sendJson(res, 403, { error: "需要管理员权限" }); return; }
     const rep = db.reports.find((r) => r.id === part(3));
     if (!rep) { sendJson(res, 404, { error: "举报不存在" }); return; }
     rep.status = "resolved";
@@ -1051,7 +1060,7 @@ async function handleApi(req, res, url) {
 
   /* ---- 管理员 ---- */
   if (p1 === "admin" && parts[2] === "users" && parts.length === 3 && m === "GET") {
-    if (!user || user.role !== "admin") { sendJson(res, 403, { error: "需要管理员权限" }); return; }
+    if (!user || user.role !== "admin") { auditDenied(user, null, "admin"); sendJson(res, 403, { error: "需要管理员权限" }); return; }
     const users = Object.keys(db.users).map((k) => {
       const u = db.users[k];
       return Object.assign(publicUser(u), { topicCount: db.topics.filter((t) => t.creatorId === u.id).length });
@@ -1060,7 +1069,7 @@ async function handleApi(req, res, url) {
     return;
   }
   if (p1 === "admin" && parts[2] === "users" && parts[4] === "ban" && m === "POST") {
-    if (!user || user.role !== "admin") { sendJson(res, 403, { error: "需要管理员权限" }); return; }
+    if (!user || user.role !== "admin") { auditDenied(user, null, "admin"); sendJson(res, 403, { error: "需要管理员权限" }); return; }
     const target = db.users[parts[3]];
     if (!target) { sendJson(res, 404, { error: "用户不存在" }); return; }
     if (target.role === "admin") { sendJson(res, 403, { error: "不能封禁管理员账号" }); return; }
@@ -1085,7 +1094,7 @@ async function handleApi(req, res, url) {
 
     if (!action && m === "DELETE") {
       if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人或管理员才能删除该项目" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "topic:delete"); sendJson(res, 403, { error: "只有项目负责人或管理员才能删除该项目" }); return; }
       removeTopicData(topic.id);
       saveDb();
       audit.log("topic_deleted", { actorId: user.id, actorName: user.nickname, topicId: topic.id, target: topic.title, result: "ok", detail: isOwner(topic, user) && topic.creatorId !== user.id ? "by-admin" : "by-owner" });
@@ -1103,7 +1112,7 @@ async function handleApi(req, res, url) {
 
     if (action === "ai" && parts.length === 5 && parts[4] === "toggle" && m === "POST") {
       if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能设置 AI 助手" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "ai:toggle"); sendJson(res, 403, { error: "只有项目负责人才能设置 AI 助手" }); return; }
       const body = await readBody(req);
       const ai = ensureAi(topic);
       ai.enabled = !!body.enabled;
@@ -1117,7 +1126,7 @@ async function handleApi(req, res, url) {
 
     if (action === "ai" && parts.length === 5 && parts[4] === "think" && m === "POST") {
       if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能让 AI 开始思考" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "ai:think"); sendJson(res, 403, { error: "只有项目负责人才能让 AI 开始思考" }); return; }
       const ai = ensureAi(topic);
       if (!ai.enabled) { sendJson(res, 400, { error: "还没有引入 AI 助手" }); return; }
       if (ai.status === "thinking") { sendJson(res, 400, { error: "AI 正在思考中，请稍等" }); return; }
@@ -1192,7 +1201,7 @@ async function handleApi(req, res, url) {
 
     if (action === "ai" && parts.length === 5 && parts[4] === "close" && m === "POST") {
       if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能结束投票" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "ai:close"); sendJson(res, 403, { error: "只有项目负责人才能结束投票" }); return; }
       const ai = ensureAi(topic);
       if (ai.status !== "voting") { sendJson(res, 400, { error: "现在不在投票阶段" }); return; }
       closeVoting(topic);
@@ -1204,7 +1213,7 @@ async function handleApi(req, res, url) {
 
     if (action === "ai" && parts.length === 5 && parts[4] === "deep" && m === "POST") {
       if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能发起深度分工" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "ai:deep"); sendJson(res, 403, { error: "只有项目负责人才能发起深度分工" }); return; }
       const ai = ensureAi(topic);
       if (!ai.enabled) { sendJson(res, 400, { error: "还没有引入 AI 助手" }); return; }
       if ((ai.rounds || 0) < 3) { sendJson(res, 400, { error: "需要先完成 3 轮以上的思考与投票" }); return; }
@@ -1290,7 +1299,7 @@ async function handleApi(req, res, url) {
     /* 负责人查看某个话题的申请 */
     if (action === "applications" && parts.length === 4 && m === "GET") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能查看申请" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "applications:read"); sendJson(res, 403, { error: "只有项目负责人才能查看申请" }); return; }
       const list = db.applications.filter((a) => a.topicId === topic.id).sort((a, b) => b.createdAt - a.createdAt);
       sendJson(res, 200, { applications: list });
       return;
@@ -1299,7 +1308,7 @@ async function handleApi(req, res, url) {
     /* 聊天记录 */
     if (action === "messages" && m === "GET") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
-      if (!isMember(topic, user.id) && user.role !== "admin") { sendJson(res, 403, { error: "只有话题成员才能查看聊天" }); return; }
+      if (!isMember(topic, user.id) && user.role !== "admin") { auditDenied(user, topic, "messages:read"); sendJson(res, 403, { error: "只有话题成员才能查看聊天" }); return; }
       const all = db.messages[topic.id] || [];
       const limit = Math.max(1, Math.min(500, parseInt(url.searchParams.get("limit"), 10) || 200));
       sendJson(res, 200, { messages: all.slice(-limit), total: all.length, limit: limit });
@@ -1391,7 +1400,7 @@ async function handleApi(req, res, url) {
     /* 组内文件 */
     if (action === "files" && m === "GET") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
-      if (!isMember(topic, user.id) && user.role !== "admin") { sendJson(res, 403, { error: "只有话题成员才能查看文件" }); return; }
+      if (!isMember(topic, user.id) && user.role !== "admin") { auditDenied(user, topic, "files:list"); sendJson(res, 403, { error: "只有话题成员才能查看文件" }); return; }
       sendJson(res, 200, { files: (db.files[topic.id] || []).map((f) => Object.assign({}, f, { url: "api/files/" + f.id })) });
       return;
     }
@@ -1471,7 +1480,7 @@ async function handleApi(req, res, url) {
       if (idx < 0) { sendJson(res, 404, { error: "文件不存在" }); return; }
       const meta = list[idx];
       const mine = meta.uploaderId === user.id;
-      if (!mine && !isOwner(topic, user)) { sendJson(res, 403, { error: "只能删除自己上传的文件" }); return; }
+      if (!mine && !isOwner(topic, user)) { auditDenied(user, topic, "files:delete"); sendJson(res, 403, { error: "只能删除自己上传的文件" }); return; }
       try { fs.unlinkSync(path.join(FILES_DIR, meta.storedName)); } catch (e) {}
       list.splice(idx, 1);
       saveDb();
@@ -1484,7 +1493,7 @@ async function handleApi(req, res, url) {
     /* 成员标签 / 移出成员 */
     if (action === "members" && parts.length === 5 && m === "DELETE") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能移出成员" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "members:remove"); sendJson(res, 403, { error: "只有项目负责人才能移出成员" }); return; }
       const memberId = part(4);
       if (memberId === topic.creatorId) { sendJson(res, 400, { error: "不能移出项目负责人" }); return; }
       if (!isMember(topic, memberId)) { sendJson(res, 404, { error: "该成员不在话题中" }); return; }
@@ -1498,7 +1507,7 @@ async function handleApi(req, res, url) {
     }
     if (action === "members" && parts.length === 6 && parts[5] === "tag" && m === "POST") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
-      if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能设置标签" }); return; }
+      if (!isOwner(topic, user)) { auditDenied(user, topic, "members:tag"); sendJson(res, 403, { error: "只有项目负责人才能设置标签" }); return; }
       const memberId = part(4);
       const member = topic.members.find((x) => x.id === memberId);
       if (!member) { sendJson(res, 404, { error: "该成员不在话题中" }); return; }
@@ -1520,7 +1529,7 @@ async function handleApi(req, res, url) {
     if (!app) { sendJson(res, 404, { error: "申请不存在" }); return; }
     const topic = findTopic(app.topicId);
     if (!topic) { sendJson(res, 404, { error: "话题已不存在" }); return; }
-    if (!isOwner(topic, user)) { sendJson(res, 403, { error: "只有项目负责人才能处理申请" }); return; }
+    if (!isOwner(topic, user)) { auditDenied(user, topic, "applications:decide"); sendJson(res, 403, { error: "只有项目负责人才能处理申请" }); return; }
     if (app.status !== "pending") { sendJson(res, 400, { error: "该申请已经处理过了" }); return; }
     if (parts[3] === "approve") {
       if (topic.members.length >= topic.limit) { sendJson(res, 400, { error: "项目已满员，无法再加入成员" }); return; }
@@ -1558,7 +1567,7 @@ async function handleApi(req, res, url) {
     if (!meta) { sendJson(res, 404, { error: "文件不存在" }); return; }
     if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
     const topic = findTopic(meta.topicId);
-    if (!topic || (!isMember(topic, user.id) && user.role !== "admin")) { sendJson(res, 403, { error: "只有话题成员才能查看文件" }); return; }
+    if (!topic || (!isMember(topic, user.id) && user.role !== "admin")) { auditDenied(user, topic, "files:download"); sendJson(res, 403, { error: "只有话题成员才能查看文件" }); return; }
     const target = path.join(FILES_DIR, meta.storedName);
     if (!fs.existsSync(target)) { sendJson(res, 404, { error: "文件已丢失" }); return; }
     /* 图片可内联预览；Word 等文档强制下载，避免被浏览器当作内容渲染 */
