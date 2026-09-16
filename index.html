@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="ProjectHub——面向大学生的线上项目协作社区。不出门不见面，也能一起把项目做出来。">
+<title>ProjectHub · 大学生线上项目协作社区</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="30" height="30" fill="none" aria-hidden="true">
+          <path d="M6 5v22M26 5v22" stroke="url(#g1)" stroke-width="2" stroke-linecap="round"/>
+          <path d="M6 9c7-3 7 6 14 3M6 16c7 4 7-5 14-2M6 23c7-3 7 6 14 3" stroke="url(#g2)" stroke-width="1.6" stroke-linecap="round" opacity=".95"/>
+          <circle cx="16" cy="16" r="3.4" fill="#FFB45C"/>
+          <defs>
+            <linearGradient id="g1" x1="6" y1="5" x2="26" y2="27" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#4D7CFF"/><stop offset="1" stop-color="#A06BFF"/>
+            </linearGradient>
+            <linearGradient id="g2" x1="6" y1="5" x2="26" y2="27" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#5EE6C0"/><stop offset="1" stop-color="#4D7CFF"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </span>
+      <span class="brand-name">ProjectHub</span>
+    </a>
+
+    <div class="topbar-search">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="search-input" type="search" placeholder="搜索项目、专业方向、关键词" autocomplete="off">
+    </div>
+
+    <div class="topbar-actions">
+      <button id="btn-bell" class="icon-btn" type="button" title="消息提醒" hidden>🔔<span id="bell-badge" class="badge-dot" hidden>0</span></button>
+      <button id="btn-inbox" class="icon-btn" type="button" title="入组申请" hidden>✉<span id="inbox-badge" class="badge-dot" hidden>0</span></button>
+      <button id="btn-admin" class="btn btn-ghost btn-small" type="button" hidden>管理</button>
+      <span id="user-chip" class="user-chip"></span>
+      <button id="btn-auth" class="btn btn-primary btn-small" type="button">登录 / 注册</button>
+      <button id="btn-switch" class="btn btn-ghost btn-small" type="button">切换身份</button>
+      <button id="btn-logout" class="btn btn-quiet btn-small" type="button" hidden>退出</button>
+      <button id="btn-create" class="btn btn-primary btn-small" type="button">发布项目</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Plaza view -->
+    <section id="view-plaza" class="view">
+      <div class="plaza-hero container">
+        <p class="plaza-eyebrow">大学生线上项目协作社区</p>
+        <h1>不出门不见面，也能一起做项目</h1>
+        <p class="plaza-sub">按专业方向找到队友，创建公开或私密话题，进群直接聊想法。</p>
+        <div class="plaza-stats">
+          <span><strong id="stat-topics">0</strong> 个话题</span>
+          <span><strong id="stat-members">0</strong> 位同学</span>
+        </div>
+      </div>
+
+      <div class="container plaza-body">
+        <div class="plaza-toolbar">
+          <div id="filter-bar" class="filter-bar" aria-label="按方向筛选"></div>
+          <span id="result-count" class="result-count"></span>
+        </div>
+        <div id="topic-grid" class="topic-grid"></div>
+        <div id="empty-state" class="empty-state" hidden>
+          <p data-empty-title>没有找到匹配的话题</p>
+          <span data-empty-sub>换个关键词或方向试试。</span>
+          <button id="empty-create-btn" class="btn btn-primary" type="button" hidden>发布第一个项目</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat view -->
+    <section id="view-chat" class="view" hidden>
+      <div class="chat-shell">
+        <header class="chat-head">
+          <button id="btn-back" class="btn btn-ghost btn-small" type="button">← 广场</button>
+          <div class="chat-head-main">
+            <h2 id="chat-title"></h2>
+            <p id="chat-meta" class="chat-meta"></p>
+          </div>
+          <div class="chat-head-actions">
+            <button id="btn-ai-panel" class="btn btn-ghost btn-small" type="button" hidden>AI 助手</button>
+            <button id="btn-report" class="btn btn-quiet btn-small" type="button">举报</button>
+            <button id="btn-side" class="btn btn-ghost btn-small" type="button">成员 / 文件</button>
+            <button id="btn-delete-topic" class="btn btn-danger btn-small" type="button" hidden>删除项目</button>
+          </div>
+        </header>
+
+        <div id="chat-announcement" class="chat-announcement" hidden></div>
+        <div id="chat-ai" class="chat-ai" hidden></div>
+
+        <div class="chat-body">
+          <div id="chat-messages" class="chat-messages"></div>
+
+          <aside id="chat-side" class="chat-side">
+            <button id="btn-side-close" class="side-close" type="button" aria-label="关闭">×</button>
+            <h3 class="side-title">成员 <span id="chat-member-count"></span></h3>
+            <ul id="member-list" class="member-list"></ul>
+            <p id="chat-vibe" class="chat-vibe"></p>
+            <p id="chat-code" class="chat-code mono" hidden></p>
+            <p id="chat-roles" class="chat-roles" hidden></p>
+            <h3 class="side-title">组内文件</h3>
+            <div id="file-upload-wrap" class="file-upload">
+              <label class="btn btn-ghost btn-small file-label" for="file-input">上传 Word / 图片</label>
+              <input id="file-input" type="file" accept=".doc,.docx,.jpg,.jpeg,.png" hidden>
+              <p class="file-hint">支持 .doc / .docx / .jpg / .png，单个不超过 5MB</p>
+            </div>
+            <ul id="file-list" class="file-list"></ul>
+          </aside>
+        </div>
+
+        <form id="chat-form" class="chat-form" autocomplete="off">
+          <div id="reply-bar" class="reply-bar" hidden></div>
+          <div class="composer">
+            <button id="btn-mention" class="icon-btn" type="button" title="提醒成员">@</button>
+            <input id="chat-input" type="text" placeholder="输入你的想法，回车发送" aria-label="消息内容">
+            <button type="submit" class="btn btn-primary">发送</button>
+          </div>
+          <div id="mention-picker" class="mention-picker" hidden></div>
+        </form>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="modal-overlay" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="对话框">
+    <button id="modal-close" class="modal-close" type="button" aria-label="关闭">×</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="script.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "projecthub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ProjectHub —— 面向大学生的线上项目协作社区",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

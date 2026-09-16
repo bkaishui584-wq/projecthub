@@ -1,0 +1,29 @@
+services:
+  projecthub:
+    build: .
+    container_name: projecthub
+    # 只监听本机，由 Nginx / Caddy / Cloudflare 负责对外与 HTTPS
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      TRUST_PROXY: "1"
+      # 必填：首次初始化管理员；请在 .env 中设置，不要写进 compose 文件
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?请在 .env 中设置 ADMIN_PASSWORD}"
+      ADMIN_NICKNAME: "${ADMIN_NICKNAME:-白开水}"
+      # 按需设置允许跨域的来源（同源部署可留空）
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+      # 需要接入大模型时再打开
+      # DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
