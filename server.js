@@ -7,6 +7,29 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+
+/* 读取项目根目录的 .env（可选）：仅填充尚未设置的环境变量。
+ * 这样 ADMIN_PASSWORD 等敏感配置只保存在 .env（已在 .gitignore 中忽略），
+ * 源码与示例配置中不存在任何默认密码。 */
+(function loadDotEnv() {
+  try {
+    const file = path.join(__dirname, ".env");
+    if (!fs.existsSync(file)) return;
+    fs.readFileSync(file, "utf8").split(/\r?\n/).forEach((line) => {
+      const text = line.trim();
+      if (!text || text.charAt(0) === "#") return;
+      const idx = text.indexOf("=");
+      if (idx < 0) return;
+      const key = text.slice(0, idx).trim();
+      let value = text.slice(idx + 1).trim();
+      if (value.length >= 2 && ((value.charAt(0) === '"' && value.charAt(value.length - 1) === '"') || (value.charAt(0) === "'" && value.charAt(value.length - 1) === "'"))) {
+        value = value.slice(1, -1);
+      }
+      if (key && process.env[key] === undefined) process.env[key] = value;
+    });
+  } catch (e) { /* .env 是可选文件 */ }
+})();
+
 const crypto = require("crypto");
 const AI = require("./ai");
 const SEC = require("./security");

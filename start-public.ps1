@@ -29,19 +29,9 @@ if ($ollamaExe) {
   Write-Host "想接入开源模型：安装 https://ollama.com/download 后执行 ollama pull qwen2.5:7b" -ForegroundColor DarkGray
 }
 
-# 2. 读取管理员密钥（保存在项目之外的独立文件，绝不入库/入包）
-$secretFile = Join-Path $env:USERPROFILE ".cache\projecthub-tools\admin-secret.txt"
-if (Test-Path $secretFile) {
-  $env:ADMIN_PASSWORD = (Get-Content $secretFile -Raw).Trim()
-  Write-Host "已从本地密钥文件加载管理员密码（不会显示在日志中）。" -ForegroundColor Green
-} elseif (-not $env:ADMIN_PASSWORD) {
-  Write-Host "未找到管理员密码：首次启动请先设置 ADMIN_PASSWORD 环境变量，或把密码写入 $secretFile" -ForegroundColor Yellow
-}
-
-# 生产环境相关配置（按需修改）
+# 2. 环境变量（ADMIN_PASSWORD 等敏感配置保存在项目根的 .env 中，服务启动时会自动读取）
 if (-not $env:NODE_ENV) { $env:NODE_ENV = "production" }
 if (-not $env:TRUST_PROXY) { $env:TRUST_PROXY = "1" }
-
 # 3. 启动 ProjectHub 服务器
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 $nodeExe = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Users\YUNIAN\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" }
