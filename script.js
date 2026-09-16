@@ -155,7 +155,7 @@
     inbox: () => api("GET", "api/inbox"),
     myApplications: () => api("GET", "api/my-applications"),
     decide: (id, action) => api("POST", "api/applications/" + encodeURIComponent(id) + "/" + action, {}),
-    messages: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/messages"),
+    messages: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/messages?limit=300"),
     sendMessage: (id, text, replyTo) => api("POST", "api/topics/" + encodeURIComponent(id) + "/messages", { text: text, replyTo: replyTo || null }),
     files: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/files"),
     uploadFile: (id, payload) => api("POST", "api/topics/" + encodeURIComponent(id) + "/files", payload),
@@ -171,6 +171,9 @@
     deleteFile: (topicId, fileId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/files/" + encodeURIComponent(fileId)),
     recallMessage: (topicId, msgId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/messages/" + encodeURIComponent(msgId)),
     sseTicket: () => api("POST", "api/sse/ticket", {}),
+    report: (payload) => api("POST", "api/reports", payload),
+    adminReports: () => api("GET", "api/admin/reports"),
+    resolveReport: (id) => api("POST", "api/admin/reports/" + encodeURIComponent(id) + "/resolve", {}),
     notifications: () => api("GET", "api/notifications"),
     readNotifications: (payload) => api("POST", "api/notifications/read", payload || { all: true }),
     adminUsers: () => api("GET", "api/admin/users"),
@@ -248,7 +251,7 @@
       '<p class="topic-vibe">组内氛围：' + escapeHtml(t.vibe || "负责人还没有填写") + '</p>' +
       '<p class="topic-require">' + (t.type === "public" ? "加入需要方向：" + escapeHtml(requiredLabels(t) || "不限") : "🔒 需要负责人提供的 6 位密码") + '</p>' +
       '<p class="topic-roles">需要角色：' + need + '</p>' + missHtml +
-      '<div class="topic-foot"><span class="topic-owner">负责人 · <strong>' + escapeHtml(t.members[0] ? t.members[0].nickname : "—") + '</strong></span>' +
+      '<div class="topic-foot"><span class="topic-owner">' + (t.memberHidden ? '负责人 · <strong>（私密项目）</strong>' : '负责人 · <strong>' + escapeHtml(t.members[0] ? t.members[0].nickname : "—") + '</strong>') + '</span>' +
       '<span class="topic-actions">' +
         '<button class="btn ' + cls + ' btn-small" type="button" data-open="' + t.id + '"' + disabled + '>' + label + '</button>' +
         (leader ? '<button class="btn btn-danger btn-small" type="button" data-delete="' + t.id + '">删除</button>' : '') +
@@ -313,7 +316,7 @@
       '<button class="auth-tab' + (mode === "register" ? " is-on" : "") + '" type="button" data-mode="register">注册</button>' +
       '</div>' +
       '<div class="field"><label>昵称</label><input class="input js-nickname" type="text" placeholder="例如：陈同学" value="' + escapeHtml(d.nickname) + '"></div>' +
-      '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 6 位" value="' + escapeHtml(d.password) + '"></div>' +
+      '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 10 位" value="' + escapeHtml(d.password) + '"></div>' +
       (mode === "register" ? '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' : '') +
       '<p class="form-error js-error" hidden></p>' +
       '<button class="btn btn-primary btn-full" type="button" data-submit>' + (mode === "login" ? "登录" : "注册并登录") + '</button>' +
@@ -335,7 +338,7 @@
         const grade = mode === "register" ? (box.querySelector(".js-grade") ? box.querySelector(".js-grade").value : d.grade) : "";
         const err = box.querySelector(".js-error");
         if (!nickname) { err.textContent = "请填写昵称"; err.hidden = false; return; }
-        if (password.length < 6) { err.textContent = "密码至少需要 6 位"; err.hidden = false; return; }
+        if (password.length < 10) { err.textContent = "密码至少需要 10 位"; err.hidden = false; return; }
         const btn = box.querySelector("[data-submit]");
         btn.disabled = true; btn.textContent = mode === "login" ? "正在登录…" : "正在注册…";
         try {
@@ -437,7 +440,7 @@
       else if (step === 2) {
         html += '<h2 class="modal-title">注册账号</h2><p class="modal-sub">创建项目前，先注册一个账号。</p>' +
           '<div class="field"><label>昵称</label><input class="input js-nickname" type="text" placeholder="例如：陈同学" value="' + escapeHtml(d.nickname) + '"></div>' +
-          '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 6 位"></div>' +
+          '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 10 位"></div>' +
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
           '<p class="form-error js-reg-error" hidden></p>' +
           '<p class="form-note note-center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
@@ -452,7 +455,7 @@
           const grade = box.querySelector(".js-grade").value;
           const err = box.querySelector(".js-reg-error");
           if (!nickname) { err.textContent = "请填写昵称"; err.hidden = false; return; }
-          if (password.length < 6) { err.textContent = "密码至少需要 6 位"; err.hidden = false; return; }
+          if (password.length < 10) { err.textContent = "密码至少需要 10 位"; err.hidden = false; return; }
           const btn = box.querySelector("[data-next]");
           btn.disabled = true; btn.textContent = "正在注册…";
           try {
@@ -591,7 +594,7 @@
       else {
         html += '<h2 class="modal-title">注册账号</h2><p class="modal-sub">注册后就能申请加入项目。已有账号可以直接登录。</p>' +
           '<div class="field"><label>昵称</label><input class="input js-nickname" type="text" placeholder="例如：陈同学"></div>' +
-          '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 6 位"></div>' +
+          '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 10 位"></div>' +
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
           '<p class="form-error js-reg-error" hidden></p>' +
           '<p class="form-note note-center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
@@ -606,7 +609,7 @@
           const grade = box.querySelector(".js-grade").value;
           const err = box.querySelector(".js-reg-error");
           if (!nickname) { err.textContent = "请填写昵称"; err.hidden = false; return; }
-          if (password.length < 6) { err.textContent = "密码至少需要 6 位"; err.hidden = false; return; }
+          if (password.length < 10) { err.textContent = "密码至少需要 10 位"; err.hidden = false; return; }
           const btn = box.querySelector("[data-next]");
           btn.disabled = true; btn.textContent = "正在注册…";
           try {
@@ -759,7 +762,7 @@
   function openAdminPanel() {
     if (!isAdmin()) { showToast("需要管理员权限"); return; }
     showModal('<h2 class="modal-title">管理中心</h2><p class="modal-sub">管理员可以封禁账号、删除任意项目。</p>' +
-      '<div class="auth-tabs"><button class="auth-tab is-on" type="button" data-tab="users">用户管理</button><button class="auth-tab" type="button" data-tab="topics">项目管理</button></div>' +
+      '<div class="auth-tabs"><button class="auth-tab is-on" type="button" data-tab="users">用户管理</button><button class="auth-tab" type="button" data-tab="topics">项目管理</button><button class="auth-tab" type="button" data-tab="reports">举报处理</button></div>' +
       '<div data-admin-body><p class="modal-sub">正在加载…</p></div>', true);
     const box = modalContent;
     box.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
@@ -789,6 +792,18 @@
             renderAdmin("users");
             showToast(!banned ? "已封禁该账号" : "已解封该账号");
           } catch (e) { showToast(e.message || "操作失败"); }
+        }));
+      } else if (tab === "reports") {
+        const r = await Store.adminReports();
+        const list = r.reports || [];
+        box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((rep) =>
+          '<li class="admin-row"><span class="admin-name">' + escapeHtml(rep.reason) + '<em>' + escapeHtml((rep.topicTitle || "（无关联项目）")) + ' · 举报人：' + escapeHtml(rep.reporterName || "") + ' · ' + formatDate(rep.createdAt) + (rep.status === "resolved" ? " · 已处理（" + escapeHtml(rep.handledBy || "") + "）" : "") + '</em></span>' +
+          (rep.detail ? '<span class="admin-meta">' + escapeHtml(rep.detail.slice(0, 60)) + '</span>' : "") +
+          (rep.status === "resolved" ? "" : '<button class="btn btn-primary btn-small" data-resolve="' + rep.id + '">标记已处理</button>') +
+          '</li>').join("") + '</ul>' : '<div class="empty-inbox">暂无举报记录。</div>';
+        box.querySelectorAll("[data-resolve]").forEach((b) => b.addEventListener("click", async () => {
+          try { await Store.resolveReport(b.getAttribute("data-resolve")); renderAdmin("reports"); showToast("已标记为处理完成"); }
+          catch (e) { showToast(e.message || "操作失败"); }
         }));
       } else {
         const r = await Store.topics();
@@ -1382,6 +1397,38 @@
     }
   }
 
+  /* ================= 举报（内容治理） ================= */
+  function openReportModal(topic) {
+    if (!isLogged()) { openAuthModal({ mode: "login" }); return; }
+    showModal('<h2 class="modal-title">举报违规内容</h2><p class="modal-sub">举报会提交给平台管理员核查处理。请勿滥用举报。</p>' +
+      '<div class="field"><label>举报类型</label><select class="select js-reason">' +
+        '<option value="违法违规内容">违法违规内容</option>' +
+        '<option value="诈骗或虚假信息">诈骗或虚假信息</option>' +
+        '<option value="人身攻击或骚扰">人身攻击或骚扰</option>' +
+        '<option value="侵权或隐私泄露">侵权或隐私泄露</option>' +
+        '<option value="恶意文件或代码">恶意文件或代码</option>' +
+        '<option value="其他">其他</option>' +
+      '</select></div>' +
+      '<div class="field"><label>补充说明（可选）</label><textarea class="textarea js-detail" placeholder="请描述具体情况，便于管理员核查"></textarea></div>' +
+      '<p class="form-error js-error" hidden></p>' +
+      '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-cancel>取消</button><button class="btn btn-primary" type="button" data-submit>提交举报</button></div>', true);
+    const box = modalContent;
+    box.querySelector("[data-cancel]").addEventListener("click", hideModal);
+    box.querySelector("[data-submit]").addEventListener("click", async () => {
+      const btn = box.querySelector("[data-submit]");
+      btn.disabled = true; btn.textContent = "正在提交…";
+      try {
+        await Store.report({ topicId: topic.id, reason: box.querySelector(".js-reason").value, detail: box.querySelector(".js-detail").value.trim() });
+        hideModal();
+        showToast("举报已提交，管理员会尽快核查");
+      } catch (e) {
+        btn.disabled = false; btn.textContent = "提交举报";
+        const err = box.querySelector(".js-error");
+        err.textContent = e.message || "提交失败"; err.hidden = false;
+      }
+    });
+  }
+
   /* ================= 消息提醒（类似微信） ================= */
   async function loadNotifications() {
     if (!isLogged()) { state.notifications = []; state.unread = 0; renderBell(); return; }
@@ -1448,6 +1495,11 @@
     $("#btn-inbox").addEventListener("click", openInboxModal);
     const bell = $("#btn-bell");
     if (bell) bell.addEventListener("click", openNotifications);
+    const reportBtn = $("#btn-report");
+    if (reportBtn) reportBtn.addEventListener("click", () => {
+      const t = state.topics.find((x) => x.id === currentTopicId);
+      if (t) openReportModal(t);
+    });
     const sideBtn = $("#btn-side");
     if (sideBtn) sideBtn.addEventListener("click", () => $("#chat-side").classList.add("is-open"));
     const sideClose = $("#btn-side-close");

@@ -30,6 +30,18 @@ function sniffFile(buffer) {
   return null;
 }
 const ROLE_TAGS = ["项目策划", "技术成员", "设计成员", "文案/材料成员", "调研成员", "答辩成员"];
+const MAJOR_IDS = ["m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11","m12","m13","m14","m15","m16","m17","m18","m19","m20","m21","m22","m23","m24","m25","m26","m27","m28"];
+const PASSWORD_MIN = 10;
+const PASSWORD_MAX = 128;
+const WEAK_PASSWORDS = ["1234567890","12345678","123456789","password","password1","qwerty123","abc123456","1111111111","0000000000","admin12345","iloveyou123","a123456789"];
+function validatePasswordPolicy(pw) {
+  if (typeof pw !== "string" || !pw) return "请填写密码";
+  if (pw.length < PASSWORD_MIN) return "密码至少需要 " + PASSWORD_MIN + " 位";
+  if (pw.length > PASSWORD_MAX) return "密码不能超过 " + PASSWORD_MAX + " 位";
+  if (WEAK_PASSWORDS.indexOf(pw.toLowerCase()) >= 0) return "密码过于简单，请更换";
+  if (/^(.)\1+$/.test(pw)) return "密码不能是重复字符";
+  return null;
+}
 
 /* 管理员账号：昵称可配置；密码只来自环境变量，代码中不存在任何默认密码 */
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -64,7 +76,7 @@ const sseTickets = new Map();          // ticket -> { userId, expiresAt }
 const loginFailures = new Map();       // 账号维度失败计数 -> { count, until }
 
 function emptyDb() {
-  return { users: {}, sessions: {}, topics: [], messages: {}, applications: [], files: {}, notifications: {} };
+  return { users: {}, sessions: {}, topics: [], messages: {}, applications: [], files: {}, notifications: {}, reports: [] };
 }
 
 function loadDb() {
@@ -78,20 +90,60 @@ function loadDb() {
       messages: parsed.messages || base.messages,
       applications: Array.isArray(parsed.applications) ? parsed.applications : base.applications,
       files: parsed.files || base.files,
-      notifications: parsed.notifications || base.notifications
+      notifications: parsed.notifications || base.notifications,
+      reports: Array.isArray(parsed.reports) ? parsed.reports : base.reports
     };
   } catch (e) {
-    return emptyDb();
+    if (e && e.code === "ENOENT") return emptyDb();          // 首次运行：还没有数据文件
+    /* 数据文件损坏：保留现场并明确失败，绝不静默清空 */
+    const keep = DATA_FILE + ".corrupt-" + Date.now();
+    try { fs.renameSync(DATA_FILE, keep); } catch (e2) {}
+    console.error("[FATAL] 数据文件无法解析，已保留为：" + keep);
+    console.error("        原因：" + (e && e.message));
+    console.error("        确认无误后可删除该文件重新初始化，或从备份恢复。");
+    process.exit(1);
   }
 }
 
 function saveDb() {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf8");
+    if (fs.existsSync(DATA_FILE)) {
+      try { fs.copyFileSync(DATA_FILE, DATA_FILE + ".bak"); } catch (e) {}   // 上一次版本
+    }
+    const tmp = DATA_FILE + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf8");
+    fs.renameSync(tmp, DATA_FILE);                                            // 原子替换
+    snapshotDaily();
   } catch (e) {
     console.error("保存数据失败：", e.message);
   }
+}
+
+/* 每天保留一份快照（最多 7 份），便于误删/损坏后恢复 */
+let lastSnapshotDay = "";
+function snapshotDaily() {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    if (day === lastSnapshotDay) return;
+    lastSnapshotDay = day;
+    const dir = path.join(DATA_DIR, "backups");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(DATA_FILE, path.join(dir, "store-" + day + ".json"));
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
+    while (files.length > 7) {
+      const old = files.shift();
+      try { fs.unlinkSync(path.join(dir, old)); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+/* 高频写入合并：300ms 内的多次变更只落盘一次，降低写放大 */
+let saveTimer = null;
+function scheduleSave() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => { saveTimer = null; saveDb(); }, 300);
+  if (saveTimer.unref) saveTimer.unref();
 }
 
 /* ---------- 密码与登录 ---------- */
@@ -246,7 +298,7 @@ function ensureAdmin(options) {
   return admin;
 }
 
-function newId(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function newId(prefix) { return prefix + crypto.randomUUID().replace(/-/g, "").slice(0, 16); }
 
 function makeProjectCode() {
   let code;
@@ -383,6 +435,18 @@ function aiView(topic, user) {
     updatedAt: ai.updatedAt || 0
   });
 }
+/* AI 输出视为不可信数据：清洗控制字符并限制长度 */
+function cleanAiText(value, max) {
+  return String(value == null ? "" : value)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, max);
+}
+function cleanAiList(list, maxItems, maxLen) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, maxItems).map((x) => cleanAiText(x, maxLen)).filter(Boolean);
+}
+
 function closeVoting(topic) {
   const ai = ensureAi(topic);
   let max = -1;
@@ -416,7 +480,7 @@ function topicSummary(topic) {
 }
 
 /* ---------- 静态文件（白名单：只暴露前端必需的 4 个文件） ---------- */
-const STATIC_WHITELIST = ["/index.html", "/styles.css", "/script.js", "/favicon.svg"];
+const STATIC_WHITELIST = ["/index.html", "/styles.css", "/script.js", "/favicon.svg", "/privacy.html", "/terms.html"];
 
 function serveStatic(req, res, url) {
   try {
@@ -578,9 +642,16 @@ function viewTopic(topic, user) {
   ensureAi(topic);
   copy.aiEnabled = !!topic.ai.enabled;
   copy.aiRounds = topic.ai.rounds || 0;
+  const viewerIsMember = !!(user && isMember(topic, user.id));
   if (!isOwner(topic, user)) {
     delete copy.code;
     delete copy.pendingApplications;
+  }
+  /* 私密话题：非成员只能看到"存在、可搜索、需要密码"，不暴露成员身份与简介细节 */
+  if (topic.type === "private" && !viewerIsMember && !isOwner(topic, user)) {
+    copy.memberCount = topic.members.length;
+    copy.members = [];
+    copy.memberHidden = true;
   }
   return copy;
 }
@@ -656,7 +727,8 @@ async function handleApi(req, res, url) {
     const grade = String(body.grade || "").trim();
     const directions = Array.isArray(body.directions) ? body.directions.filter((x) => typeof x === "string").slice(0, 5) : [];
     if (nickname.length < 2 || nickname.length > 16) { sendJson(res, 400, { error: "昵称需要 2-16 个字符" }); return; }
-    if (password.length < 6) { sendJson(res, 400, { error: "密码至少需要 6 位" }); return; }
+    const pwError = validatePasswordPolicy(password);
+    if (pwError) { sendJson(res, 400, { error: pwError }); return; }
     if (!grade) { sendJson(res, 400, { error: "请选择大学几年级" }); return; }
     if (nickname.toLowerCase() === ADMIN_NICKNAME.toLowerCase()) { sendJson(res, 403, { error: "该昵称不可使用" }); return; }
     if (findUserByNickname(nickname)) { sendJson(res, 409, { error: "该昵称已被注册，请直接登录" }); return; }
@@ -684,7 +756,8 @@ async function handleApi(req, res, url) {
     const accountKey = nickname.toLowerCase();
 
     /* 账号维度失败锁定 */
-    const fail = loginFailures.get(accountKey);
+    let fail = loginFailures.get(accountKey);
+    if (fail && fail.until && fail.until <= Date.now()) { loginFailures.delete(accountKey); fail = null; }   // 锁定期已过则重新计数
     if (fail && fail.until > Date.now()) {
       const wait = Math.ceil((fail.until - Date.now()) / 1000);
       audit.log("login_locked", { actorName: nickname, ip: ip, result: "deny" });
@@ -696,7 +769,7 @@ async function handleApi(req, res, url) {
     const u = findUserByNickname(nickname);
     const passwordOk = !!(u && verifyPassword(u, password));
     if (!passwordOk) {
-      const prev = (fail && fail.until > Date.now()) ? fail.count : 0;
+      const prev = fail ? (fail.count || 0) : 0;
       const count = prev + 1;
       const windowMs = SEC.LIMITS.loginWindowMs;
       loginFailures.set(accountKey, { count: count, until: count >= SEC.LIMITS.loginPerAccount ? Date.now() + windowMs : 0 });
@@ -740,7 +813,7 @@ async function handleApi(req, res, url) {
   if (p1 === "me" && m === "PATCH") {
     if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
     const body = await readBody(req);
-    if (Array.isArray(body.directions)) user.directions = body.directions.filter((x) => typeof x === "string").slice(0, 5);
+    if (Array.isArray(body.directions)) user.directions = body.directions.filter((x) => MAJOR_IDS.indexOf(x) >= 0).slice(0, 5);
     if (typeof body.grade === "string" && body.grade) user.grade = body.grade.slice(0, 12);
     saveDb();
     sendJson(res, 200, { user: publicUser(user) });
@@ -759,8 +832,8 @@ async function handleApi(req, res, url) {
     const title = String(body.title || "").trim().slice(0, 60);
     const desc = String(body.desc || "").trim().slice(0, 300);
     const vibe = String(body.vibe || "").trim().slice(0, 60);
-    const directions = Array.isArray(body.directions) ? body.directions.filter((x) => typeof x === "string").slice(0, 5) : [];
-    const required = Array.isArray(body.required) ? body.required.filter((x) => typeof x === "string").slice(0, 5) : [];
+    const directions = Array.isArray(body.directions) ? body.directions.filter((x) => MAJOR_IDS.indexOf(x) >= 0).slice(0, 5) : [];
+    const required = Array.isArray(body.required) ? body.required.filter((x) => MAJOR_IDS.indexOf(x) >= 0).slice(0, 5) : [];
     const neededRoles = Array.isArray(body.neededRoles) ? body.neededRoles.filter((x) => ROLE_TAGS.indexOf(x) >= 0).slice(0, 6) : [];
     const type = body.type === "private" ? "private" : "public";
     const limit = Math.max(2, Math.min(50, parseInt(body.limit, 10) || 6));
@@ -825,7 +898,8 @@ async function handleApi(req, res, url) {
   if (p1 === "notifications" && parts.length === 2 && m === "GET") {
     if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
     const list = db.notifications[user.id] || [];
-    sendJson(res, 200, { notifications: list.slice(0, 60), unread: list.filter((n) => !n.read).length });
+    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit"), 10) || 60));
+    sendJson(res, 200, { notifications: list.slice(0, limit), unread: list.filter((n) => !n.read).length });
     return;
   }
   if (p1 === "notifications" && parts[2] === "read" && m === "POST") {
@@ -835,8 +909,53 @@ async function handleApi(req, res, url) {
     list.forEach((n) => {
       if (body.all || (Array.isArray(body.ids) && body.ids.indexOf(n.id) >= 0)) n.read = true;
     });
-    saveDb();
+    scheduleSave();
     sendJson(res, 200, { ok: true, unread: list.filter((n) => !n.read).length });
+    return;
+  }
+
+  /* ---- 内容举报（用户提交） ---- */
+  if (p1 === "reports" && parts.length === 2 && m === "POST") {
+    if (!user) { sendJson(res, 401, { error: "请先登录再举报" }); return; }
+    if (user.banned) { sendJson(res, 403, { error: "该账号已被封禁" }); return; }
+    const rl = rateLimiter.consume("report:" + user.id, 5, 60 * 60 * 1000);
+    if (!rl.allowed) { sendJson(res, 429, { error: "举报过于频繁，请稍后再试" }); return; }
+    const body = await readBody(req);
+    const reason = cleanAiText(body.reason, 60);
+    const detail = cleanAiText(body.detail, 500);
+    const topicId = cleanAiText(body.topicId, 40);
+    const targetUserId = cleanAiText(body.targetUserId, 40);
+    if (!reason) { sendJson(res, 400, { error: "请选择举报类型" }); return; }
+    const topic = topicId ? findTopic(topicId) : null;
+    const report = {
+      id: newId("r"), reporterId: user.id, reporterName: user.nickname,
+      topicId: topic ? topic.id : "", topicTitle: topic ? topic.title : "",
+      targetUserId: targetUserId || "", reason: reason, detail: detail,
+      status: "open", createdAt: Date.now(), handledAt: 0, handledBy: ""
+    };
+    db.reports.unshift(report);
+    if (db.reports.length > 500) db.reports = db.reports.slice(0, 500);
+    saveDb();
+    audit.log("report_submitted", { actorId: user.id, topicId: report.topicId, targetId: report.targetUserId, reason: reason, result: "ok" });
+    Object.keys(db.users).forEach((k) => { if (db.users[k].role === "admin") notify(k, { type: "report", topicId: report.topicId, topicTitle: report.topicTitle, from: user.nickname, text: "收到一条举报：" + reason }); });
+    sendJson(res, 200, { ok: true, id: report.id });
+    return;
+  }
+  if (p1 === "admin" && parts[2] === "reports" && parts.length === 3 && m === "GET") {
+    if (!user || user.role !== "admin") { sendJson(res, 403, { error: "需要管理员权限" }); return; }
+    sendJson(res, 200, { reports: db.reports.slice(0, 200) });
+    return;
+  }
+  if (p1 === "admin" && parts[2] === "reports" && parts[4] === "resolve" && m === "POST") {
+    if (!user || user.role !== "admin") { sendJson(res, 403, { error: "需要管理员权限" }); return; }
+    const rep = db.reports.find((r) => r.id === part(3));
+    if (!rep) { sendJson(res, 404, { error: "举报不存在" }); return; }
+    rep.status = "resolved";
+    rep.handledAt = Date.now();
+    rep.handledBy = user.nickname;
+    saveDb();
+    audit.log("report_resolved", { actorId: user.id, targetId: rep.id, result: "ok" });
+    sendJson(res, 200, { report: rep });
     return;
   }
 
@@ -932,14 +1051,14 @@ async function handleApi(req, res, url) {
       try {
         const draftRes = await AI.generateDraft(topic, msgs);
         const dirRes = await AI.generateDirections(topic, msgs, draftRes.draft);
-        ai.draft = draftRes.draft || "";
+        ai.draft = cleanAiText(draftRes.draft, 8000);
         ai.source = draftRes.source;
         ai.model = draftRes.model;
         ai.options = (dirRes.directions || []).slice(0, 4).map((d, i) => ({
           id: "o" + (i + 1),
-          title: String(d.title || ("方向 " + (i + 1))),
-          desc: String(d.desc || ""),
-          reason: String(d.reason || ""),
+          title: cleanAiText(d.title || ("方向 " + (i + 1)), 80),
+          desc: cleanAiText(d.desc, 600),
+          reason: cleanAiText(d.reason, 200),
           votes: []
         }));
         ai.options.push({ id: "rethink", title: "再想想", desc: "这些方向都不太符合预期，想继续和组员讨论。", reason: "", votes: [] });
@@ -975,7 +1094,7 @@ async function handleApi(req, res, url) {
       ai.options.forEach((o) => (o.votes || []).forEach((v) => { voters[v] = 1; }));
       if (Object.keys(voters).length >= topic.members.length) closeVoting(topic);
       ai.updatedAt = Date.now();
-      saveDb();
+      scheduleSave();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       sendJson(res, 200, { ai: aiView(topic, user) });
       return;
@@ -1016,7 +1135,14 @@ async function handleApi(req, res, url) {
       const msgs = db.messages[topic.id] || [];
       try {
         const deepRes = await AI.generateDeepPlan(topic, msgs, ai.draft);
-        ai.deep = { at: Date.now(), items: deepRes.items, source: deepRes.source, model: deepRes.model };
+        const safeItems = (deepRes.items || []).slice(0, 50).map((it) => ({
+          memberId: it.memberId,
+          nickname: cleanAiText(it.nickname, 24),
+          task: cleanAiText(it.task, 400),
+          books: cleanAiList(it.books, 6, 120),
+          suggestion: cleanAiText(it.suggestion, 500)
+        }));
+        ai.deep = { at: Date.now(), items: safeItems, source: deepRes.source, model: deepRes.model };
         ai.status = "assigned";
       } catch (e) {
         console.error("[AI] 深度思考失败：", e.message);
@@ -1084,7 +1210,9 @@ async function handleApi(req, res, url) {
     if (action === "messages" && m === "GET") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
       if (!isMember(topic, user.id) && user.role !== "admin") { sendJson(res, 403, { error: "只有话题成员才能查看聊天" }); return; }
-      sendJson(res, 200, { messages: db.messages[topic.id] || [] });
+      const all = db.messages[topic.id] || [];
+      const limit = Math.max(1, Math.min(500, parseInt(url.searchParams.get("limit"), 10) || 200));
+      sendJson(res, 200, { messages: all.slice(-limit), total: all.length, limit: limit });
       return;
     }
     if (action === "messages" && m === "POST") {
@@ -1126,7 +1254,7 @@ async function handleApi(req, res, url) {
 
       if (!db.messages[topic.id]) db.messages[topic.id] = [];
       db.messages[topic.id].push(message);
-      saveDb();
+      scheduleSave();
 
       /* 通知其他成员（类似微信消息提醒） */
       const preview = text.length > 60 ? text.slice(0, 60) + "…" : text;
@@ -1163,7 +1291,7 @@ async function handleApi(req, res, url) {
         msg.recalledBy = mine ? "自己" : "负责人";
         msg.text = "";
         msg.mentions = [];
-        saveDb();
+        scheduleSave();
         broadcastTopic(topic, "message", { topicId: topic.id, message: msg });
       }
       sendJson(res, 200, { message: msg });
