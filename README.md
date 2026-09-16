@@ -117,10 +117,25 @@ node server.js
 
 ## 管理员账号
 
-- 昵称：`白开水`
-- 密码：`yunian240913`
+管理员账号在**首次启动**时创建，密码只能通过环境变量提供，代码中**不存在任何默认密码**：
 
-服务器启动时会自动创建（或重置）这个管理员账号。
+```powershell
+$env:ADMIN_NICKNAME="your-admin-name"       # 可选，默认 白开水
+$env:ADMIN_PASSWORD="<足够长的随机强密码>"   # 必填：首次初始化或轮换密码时
+node server.js
+```
+
+- 若系统中还没有管理员账号，且未提供 `ADMIN_PASSWORD`，服务会**明确拒绝启动**；
+- 管理员已存在时，启动过程**不会**修改其密码、角色或封禁状态；
+- 需要更换密码时执行一次性轮换（会让该账号的旧会话失效）：
+
+```powershell
+$env:ADMIN_PASSWORD="<新的强密码>"
+node server.js --rotate-admin-password
+```
+
+- 出于安全考虑，任何日志都不会输出密码；
+- 历史上曾在源码/文档中出现过的密码一律视为**已泄露**，必须更换，不要继续使用。
 
 ## 本地运行
 
@@ -190,12 +205,31 @@ Render、Railway、Fly.io、Zeabur、阿里云 / 腾讯云服务器等：
 | 变量 | 说明 |
 | --- | --- |
 | `PORT` | 服务端口，默认 8787 |
-| `ADMIN_NICKNAME` / `ADMIN_PASSWORD` | 管理员账号，默认 `白开水` / `yunian240913`，**生产环境请务必修改** |
+| `ADMIN_NICKNAME` / `ADMIN_PASSWORD` | 管理员昵称与初始密码；密码**必须**由环境变量提供，代码与文档中不含任何默认密码 |
+| `ALLOWED_ORIGINS` | 允许跨域的 Origin 白名单（逗号分隔）；留空表示不开放跨域 |
+| `TRUST_PROXY` | 置于 Nginx / Cloudflare 之后时设为 `1`，以便限流与审计使用真实 IP |
+| `MAX_BODY_BYTES` / `MAX_JSON_*` / `MAX_FILE_BYTES` / `RATE_*` / `MAX_SSE_*` / `MAX_AI_CONCURRENT` | 请求体、JSON 结构、上传、限流、SSE 连接、AI 并发的安全上限（详见 `.env.example`） |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | 本机开源模型（也可不配置，自动探测 11434/1234/9997/8080） |
 | `DEEPSEEK_API_KEY` | DeepSeek 官方 API |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | OpenAI 官方 API（Responses API） |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 任意 OpenAI 兼容服务 |
 | `TAVILY_API_KEY` | 可选，联网检索 |
+
+## 安全边界（已内置）
+
+服务端已建立可配置的基础安全边界，全部阈值可用环境变量覆盖（见 `.env.example`）：
+
+| 类别 | 机制 |
+| --- | --- |
+| 请求体 | `MAX_BODY_BYTES` 预检 `Content-Length` + 流式累计上限，超限立即 413 并断开 |
+| JSON 结构 | 深度 / 数组长度 / 对象字段数 / 字符串长度上限，非法 JSON 返回 400 |
+| 上传 | 扩展名白名单 + Magic Number 真实类型校验 + 单文件大小 + 单项目文件数 + 单用户总容量 + 上传频率限制 |
+| 限流 | 登录（IP + 账号失败锁定）、注册、发言、上传、AI、API 总量，均返回 429 与 `Retry-After` |
+| 并发 | 全局 + 单 IP 在途请求上限，超出返回 503；AI 单独并发闸门 |
+| 超时与回收 | 请求超时、请求体读取超时、SSE 心跳与空闲回收、过期会话与票据定期清理 |
+| SSE | 一次性短期票据鉴权 + 全站/单 IP 连接上限 + 按成员定向推送（不再全局广播） |
+| AI | 单项目调用频率上限 + 全局并发上限 + 调用超时 + 异常审计 |
+| 审计日志 | 登录成败、管理员操作、项目增删、成员变更、文件上传删除、权限拒绝、限流与崩溃均写入 `logs/audit.log`（不含密码与 Token） |
 
 ## 安全说明（交付前请知悉）
 
