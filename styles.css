@@ -473,3 +473,11 @@ em { font-style: normal; }
 /* 组内文件：下载按钮（不再使用带 token 的链接） */
 .file-link { color: var(--blue); font-size: .88rem; word-break: break-all; text-align: left; }
 .file-link:hover { text-decoration: underline; }
+
+/* 无内联样式的工具类（配合严格 CSP） */
+.note-center { text-align: center; }
+.note-mt-14 { margin-top: 14px; }
+.note-mt-18 { margin-top: 18px; }
+.hint-left { text-align: left; margin-top: 10px; }
+.mt-18 { margin-top: 18px; }
+.chat-empty { color: var(--text-dim); text-align: center; padding: 40px 0; }

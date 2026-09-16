@@ -107,6 +107,46 @@ function verifyPassword(user, password) {
 }
 const SESSION_TTL_MS = 7 * 24 * 3600 * 1000;   // 7 天
 const MAX_SESSIONS_PER_USER = 20;
+/* ---------- 私密话题密码：加盐哈希存储 + 旧数据迁移 ---------- */
+function safeEqualStr(a, b) {
+  const ba = Buffer.from(String(a), "utf8");
+  const bb = Buffer.from(String(b), "utf8");
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+function setTopicPassword(topic, plain) {
+  topic.passwordSalt = makeSalt();
+  topic.passwordHash = hashPassword(plain, topic.passwordSalt);
+  delete topic.password;
+}
+function verifyTopicPassword(topic, plain) {
+  if (typeof plain !== "string" || !/^[0-9]{6}$/.test(plain)) return false;
+  if (topic.passwordHash && topic.passwordSalt) {
+    return safeEqualStr(hashPassword(plain, topic.passwordSalt), topic.passwordHash);
+  }
+  if (typeof topic.password === "string" && topic.password) {
+    const ok = safeEqualStr(plain, topic.password);
+    if (ok) { setTopicPassword(topic, plain); saveDb(); }   // 惰性升级为哈希
+    return ok;
+  }
+  return false;
+}
+/* 启动时一次性迁移：把历史明文密码改为哈希（密码本身不变，用户无感） */
+function migrateTopicPasswords() {
+  let count = 0;
+  db.topics.forEach((t) => {
+    if (typeof t.password === "string" && t.password && !t.passwordHash) {
+      setTopicPassword(t, t.password);
+      count += 1;
+    }
+  });
+  if (count > 0) {
+    saveDb();
+    audit.log("topic_password_migrated", { detail: String(count), result: "ok" });
+  }
+  return count;
+}
+
 function createSession(userId) {
   const token = crypto.randomBytes(24).toString("hex");
   const now = Date.now();
@@ -271,7 +311,7 @@ function sendJson(res, code, obj) {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
   }, res.corsHeaders || {});
-  SEC.applySecurityHeaders(res, headers);
+  SEC.applySecurityHeaders(res, headers, res.secReq);
   res.writeHead(code, headers);
   res.end(JSON.stringify(obj));
 }
@@ -291,6 +331,8 @@ async function readBody(req, opts) {
 function publicTopic(topic) {
   const copy = Object.assign({}, topic);
   delete copy.password;
+  delete copy.passwordHash;
+  delete copy.passwordSalt;
   copy.pendingApplications = db.applications.filter((a) => a.topicId === topic.id && a.status === "pending").length;
   return copy;
 }
@@ -402,7 +444,7 @@ function serveStatic(req, res, url) {
         "Content-Type": MIME[ext] || "application/octet-stream",
         "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300"
       };
-      SEC.applySecurityHeaders(res, headers);
+      SEC.applySecurityHeaders(res, headers, res.secReq);
       res.writeHead(200, headers);
       fs.createReadStream(target).pipe(res);
     });
@@ -422,9 +464,11 @@ if (ROTATE_ADMIN) {
   process.exit(0);
 }
 ensureAdmin();
+migrateTopicPasswords();
 
 /* ---------- HTTP 服务 ---------- */
 const server = http.createServer(async (req, res) => {
+  res.secReq = req;
   const ip = SEC.clientIp(req);
   const origin = req.headers.origin || "";
   const originList = allowedOrigins();
@@ -462,7 +506,7 @@ const server = http.createServer(async (req, res) => {
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no"
       }, res.corsHeaders || {});
-      SEC.applySecurityHeaders(res, headers);
+      SEC.applySecurityHeaders(res, headers, res.secReq);
       res.writeHead(200, headers);
       res.write("retry: 3000\n\n");
       res.write("event: hello\ndata: {}\n\n");
@@ -739,12 +783,14 @@ async function handleApi(req, res, url) {
       required: type === "public" ? required : [],
       neededRoles: neededRoles,
       type: type,
-      password: type === "private" ? password : "",
+      passwordHash: "",
+      passwordSalt: "",
       limit: limit,
       members: [{ id: user.id, nickname: user.nickname, grade: user.grade, tag: "" }],
       ai: defaultAi(),
       createdAt: Date.now()
     };
+    if (type === "private") setTopicPassword(topic, password);
     db.topics.unshift(topic);
     db.messages[topic.id] = [];
     db.files[topic.id] = [];
@@ -997,7 +1043,8 @@ async function handleApi(req, res, url) {
       if (existing) { sendJson(res, 200, { application: existing, duplicated: true }); return; }
       const body = await readBody(req);
       if (topic.type === "private") {
-        if (!isSixDigits(String(body.password || "")) || String(body.password) !== topic.password) {
+        if (!verifyTopicPassword(topic, String(body.password || ""))) {
+          audit.log("topic_password_rejected", { actorId: user.id, topicId: topic.id, result: "deny" });
           sendJson(res, 403, { error: "密码不正确，请向负责人确认" }); return;
         }
       } else {
@@ -1296,11 +1343,15 @@ async function handleApi(req, res, url) {
     if (!topic || (!isMember(topic, user.id) && user.role !== "admin")) { sendJson(res, 403, { error: "只有话题成员才能查看文件" }); return; }
     const target = path.join(FILES_DIR, meta.storedName);
     if (!fs.existsSync(target)) { sendJson(res, 404, { error: "文件已丢失" }); return; }
-    res.writeHead(200, {
+    /* 图片可内联预览；Word 等文档强制下载，避免被浏览器当作内容渲染 */
+    const isImage = String(meta.type || "").indexOf("image/") === 0;
+    const dlHeaders = {
       "Content-Type": meta.type || "application/octet-stream",
-      "Content-Disposition": "inline; filename*=UTF-8''" + encodeURIComponent(meta.name),
-      "Cache-Control": "private, max-age=60"
-    });
+      "Content-Disposition": (isImage ? "inline" : "attachment") + "; filename*=UTF-8''" + encodeURIComponent(meta.name),
+      "Cache-Control": "private, no-store"
+    };
+    SEC.applySecurityHeaders(res, dlHeaders, req);
+    res.writeHead(200, dlHeaders);
     fs.createReadStream(target).pipe(res);
     return;
   }

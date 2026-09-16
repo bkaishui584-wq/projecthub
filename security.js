@@ -259,15 +259,39 @@ class SseHub {
   }
 }
 
-/* ---------- 安全响应头 ---------- */
-function applySecurityHeaders(res, extra) {
+/* ---------- 安全响应头（含 CSP，HTTPS 时附加 HSTS） ---------- */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'"
+].join("; ");
+
+function isSecureRequest(req) {
+  if (!req) return false;
+  try {
+    if (req.socket && req.socket.encrypted) return true;
+    const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+    return proto === "https";
+  } catch (e) { return false; }
+}
+
+function applySecurityHeaders(res, extra, req) {
   const headers = Object.assign({
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "X-Frame-Options": "DENY",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=()",
-    "Cross-Origin-Resource-Policy": "same-origin"
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Content-Security-Policy": CSP
   }, extra || {});
+  if (isSecureRequest(req)) headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
   Object.keys(headers).forEach((k) => { try { res.setHeader(k, headers[k]); } catch (e) {} });
 }
 
@@ -305,4 +329,4 @@ function createAudit(file) {
   };
 }
 
-module.exports = { LIMITS, clientIp, safeDecode, readJsonBody, validateShape, RateLimiter, Inflight, SseHub, applySecurityHeaders, createAudit };
+module.exports = { LIMITS, CSP, clientIp, safeDecode, readJsonBody, validateShape, RateLimiter, Inflight, SseHub, applySecurityHeaders, isSecureRequest, createAudit };

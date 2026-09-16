@@ -317,7 +317,7 @@
       (mode === "register" ? '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' : '') +
       '<p class="form-error js-error" hidden></p>' +
       '<button class="btn btn-primary btn-full" type="button" data-submit>' + (mode === "login" ? "登录" : "注册并登录") + '</button>' +
-      '<p class="form-note" style="margin-top:14px;text-align:center">' + (mode === "login" ? "还没有账号？点上面的「注册」" : "已有账号？点上面的「登录」") + '</p>';
+      '<p class="form-note note-center note-mt-14">' + (mode === "login" ? "还没有账号？点上面的「注册」" : "已有账号？点上面的「登录」") + '</p>';
   }
 
   function openAuthModal(opts) {
@@ -373,7 +373,7 @@
         '<button class="role-option" type="button" data-role="leader"><span class="role-icon">🧑‍💼</span><h3>项目负责人</h3><p>我有一个项目想法，想创建话题、招募队友。</p></button>' +
         '<button class="role-option" type="button" data-role="member"><span class="role-icon">🙋</span><h3>项目成员</h3><p>我想找感兴趣的项目，申请加入团队。</p></button>' +
       '</div>' +
-      '<p class="form-note" style="text-align:center;margin-top:18px"><button class="link-btn" type="button" data-login>' + (isLogged() ? "已登录：" + escapeHtml(state.user.nickname) : "已有账号？直接登录") + '</button></p>', false);
+      '<p class="form-note note-center note-mt-18"><button class="link-btn" type="button" data-login>' + (isLogged() ? "已登录：" + escapeHtml(state.user.nickname) : "已有账号？直接登录") + '</button></p>', false);
     $("#modal-content [data-role='leader']").addEventListener("click", openLeaderFlow);
     $("#modal-content [data-role='member']").addEventListener("click", openMemberFlow);
     const loginLink = $("#modal-content [data-login]");
@@ -440,7 +440,7 @@
           '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 6 位"></div>' +
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
           '<p class="form-error js-reg-error" hidden></p>' +
-          '<p class="form-note" style="text-align:center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
+          '<p class="form-note note-center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>注册并继续</button></div>';
         showModal(html, true);
         const box = modalContent;
@@ -477,13 +477,13 @@
           '<div class="form-row"><div class="field"><label>人数限制</label><input class="input js-limit" type="number" min="2" max="50" value="' + d.limit + '"></div><div class="field"><label>话题类型</label><input class="input" type="text" value="' + (d.type === "private" ? "🔒 私密话题" : "🔓 公开话题") + '" readonly></div></div>' +
           '<div class="field"><label>需要的成员标签（可多选）</label></div><div class="chip-grid" data-roles>';
         ROLE_TAGS.forEach((t) => { html += '<button class="chip' + (d.neededRoles.indexOf(t) >= 0 ? " is-on" : "") + '" type="button" data-role-tag="' + t + '">' + t + '</button>'; });
-        html += '</div><p class="wizard-hint js-role-hint" style="text-align:left;margin-top:10px">已选 ' + d.neededRoles.length + ' 个标签' + (d.neededRoles.length ? '：' + escapeHtml(d.neededRoles.join("、")) : '（可以不选，也可以随时修改）') + '</p>';
+        html += '</div><p class="wizard-hint js-role-hint hint-left">已选 ' + d.neededRoles.length + ' 个标签' + (d.neededRoles.length ? '：' + escapeHtml(d.neededRoles.join("、")) : '（可以不选，也可以随时修改）') + '</p>';
         if (d.type === "public") {
-          html += '<div class="field" style="margin-top:18px"><label>申请加入所需的项目方向（可多选，最多 5 个）</label></div><div class="major-grid">';
+          html += '<div class="field mt-18"><label>申请加入所需的项目方向（可多选，最多 5 个）</label></div><div class="major-grid">';
           MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.required.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-req="' + m.id + '"><span class="mj-icon">' + m.icon + '</span>' + m.label + '</button>'; });
           html += '</div>';
         } else {
-          html += '<div class="field" style="margin-top:18px"><label>加入密码（6 位数字）</label><input class="input input-code js-code" type="password" inputmode="numeric" maxlength="6" placeholder="000000" value="' + escapeHtml(d.code) + '"></div><p class="form-note">同学申请加入时需要输入这 6 位密码。</p>';
+          html += '<div class="field mt-18"><label>加入密码（6 位数字）</label><input class="input input-code js-code" type="password" inputmode="numeric" maxlength="6" placeholder="000000" value="' + escapeHtml(d.code) + '"></div><p class="form-note">同学申请加入时需要输入这 6 位密码。</p>';
         }
         html += '<p class="form-error js-create-error" hidden></p><div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>创建项目</button></div>';
         showModal(html, true);
@@ -594,7 +594,7 @@
           '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 6 位"></div>' +
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
           '<p class="form-error js-reg-error" hidden></p>' +
-          '<p class="form-note" style="text-align:center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
+          '<p class="form-note note-center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>注册并进入广场</button></div>';
         showModal(html, true);
         const box = modalContent;
@@ -1010,7 +1010,7 @@
     box.innerHTML = "";
     const msgs = state.messages[topicId] || [];
     if (!msgs.length) {
-      box.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:40px 0;">还没有消息，来说第一句吧。</div>';
+      box.innerHTML = '<div class="chat-empty">还没有消息，来说第一句吧。</div>';
     } else {
       msgs.forEach((m) => box.appendChild(buildMessageEl(topic, m)));
       box.querySelectorAll("[data-act]").forEach((b) => {
@@ -1307,7 +1307,7 @@
           '<div class="ai-option-top"><strong>' + escapeHtml(o.title) + '</strong><span class="ai-count">' + o.votes + ' 票</span></div>' +
           (o.desc ? '<p class="ai-option-desc">' + escapeHtml(o.desc) + '</p>' : '') +
           (o.reason ? '<p class="ai-option-reason">推荐理由：' + escapeHtml(o.reason) + '</p>' : '') +
-          '<div class="ai-bar"><span style="width:' + pct + '%"></span></div>' +
+          '<div class="ai-bar"><span data-w="' + pct + '"></span></div>' +
           '<button class="btn ' + (mine ? "btn-primary" : "btn-ghost") + ' btn-small" type="button" data-ai-vote="' + o.id + '">' + (mine ? "你已投这一项" : "投这一项") + '</button>' +
           '</div>';
       });
@@ -1332,6 +1332,7 @@
     }
 
     panel.innerHTML = head + '<div class="ai-body">' + body + '</div>';
+    panel.querySelectorAll("[data-w]").forEach((el) => { try { el.style.width = el.getAttribute("data-w") + "%"; } catch (e) {} });
     wireAiPanel(topic);
     const collapseBtn = panel.querySelector("[data-ai-collapse]");
     if (collapseBtn) collapseBtn.addEventListener("click", () => { aiOpen[topic.id] = !open; renderAiPanel(topic); });
