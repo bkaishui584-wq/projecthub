@@ -617,6 +617,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    /* 拒绝协议相对/权威形式（如 //.env、//evil.example/.env）的请求地址：
+       这类写法会被 URL 解析器当作"主机"部分，导致路由语义与预期不一致 */
+    const rawUrl = String(req.url || "");
+    if (rawUrl.charAt(0) === "/" && rawUrl.charAt(1) === "/") {
+      audit.log("bad_request_target", { ip: ip, path: rawUrl.slice(0, 60), result: "deny" });
+      sendJson(res, 400, { error: "请求地址不合法" });
+      return;
+    }
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
 
     /* SSE：一次性短期票据鉴权 + 连接数上限 + 空闲回收 */
