@@ -218,11 +218,49 @@ function userByToken(token) {
   sess.lastSeenAt = Date.now();
   return db.users[sess.userId] || null;
 }
-/* 只接受 Authorization: Bearer，彻底取消 URL 查询参数传 Token */
+/* 认证来源：① Authorization: Bearer（API 客户端）② HttpOnly Cookie（浏览器）。
+   URL 查询参数传 Token 的方式已彻底移除。 */
+const SESSION_COOKIE = "ph_session";
+const CSRF_COOKIE = "ph_csrf";
+
+function parseCookies(req) {
+  const out = {};
+  const header = String(req.headers["cookie"] || "");
+  header.split(";").forEach((part) => {
+    const i = part.indexOf("=");
+    if (i < 0) return;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    if (k) { try { out[k] = decodeURIComponent(v); } catch (e) { out[k] = v; } }
+  });
+  return out;
+}
+function authToken(req) {
+  const header = String(req.headers["authorization"] || "");
+  if (header.indexOf("Bearer ") === 0) return { token: header.slice(7).trim(), via: "bearer" };
+  const cookies = parseCookies(req);
+  if (cookies[SESSION_COOKIE]) return { token: cookies[SESSION_COOKIE], via: "cookie" };
+  return { token: "", via: "" };
+}
 function authUser(req) {
-  const header = req.headers["authorization"] || "";
-  if (header.indexOf("Bearer ") !== 0) return null;
-  return userByToken(header.slice(7).trim());
+  const info = authToken(req);
+  return info.token ? userByToken(info.token) : null;
+}
+function authVia(req) { return authToken(req).via; }
+function issueCsrfToken() { return crypto.randomBytes(24).toString("hex"); }
+function setSessionCookies(req, res, token, csrf) {
+  const secure = SEC.isSecureRequest(req) ? "; Secure" : "";
+  const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+  res.setHeader("Set-Cookie", [
+    SESSION_COOKIE + "=" + token + "; HttpOnly; SameSite=Lax; Path=/; Max-Age=" + maxAge + secure,
+    CSRF_COOKIE + "=" + csrf + "; SameSite=Lax; Path=/; Max-Age=" + maxAge + secure
+  ]);
+}
+function clearSessionCookies(res) {
+  res.setHeader("Set-Cookie", [
+    SESSION_COOKIE + "=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
+    CSRF_COOKIE + "=; SameSite=Lax; Path=/; Max-Age=0"
+  ]);
 }
 /* SSE 专用：一次性、短期票据（不属于会话凭据） */
 function issueSseTicket(userId) {
@@ -672,6 +710,19 @@ async function handleApi(req, res, url) {
   const m = req.method || "GET";
   const p1 = parts[1] || "";
   const user = authUser(req);
+  const via = authVia(req);
+
+  /* 双提交 Cookie 校验：Cookie 认证的写操作必须带匹配的 X-CSRF-Token */
+  if (user && via === "cookie" && ["POST", "PATCH", "DELETE"].indexOf(m) >= 0) {
+    const cookies = parseCookies(req);
+    const header = String(req.headers["x-csrf-token"] || "");
+    if (!cookies[CSRF_COOKIE] || !header || !safeEqualStr(header, cookies[CSRF_COOKIE])) {
+      audit.log("csrf_rejected", { actorId: user.id, ip: SEC.clientIp(req), path: url.pathname.slice(0, 60), result: "deny" });
+      sendJson(res, 403, { error: "请求校验失败，请刷新页面后重试" });
+      return;
+    }
+  }
+
   /* 路径片段安全解码：非法编码返回 400，而不是抛出异常 */
   const part = (i) => {
     const v = SEC.safeDecode(parts[i]);
@@ -734,9 +785,13 @@ async function handleApi(req, res, url) {
     if (findUserByNickname(nickname)) { sendJson(res, 409, { error: "该昵称已被注册，请直接登录" }); return; }
     const u = createUser(nickname, password, grade, "user", directions);
     const token = createSession(u.id);
+    const csrf = issueCsrfToken();
+    setSessionCookies(req, res, token, csrf);
     saveDb();
     audit.log("register_success", { actorId: u.id, actorName: nickname, ip: SEC.clientIp(req), result: "ok" });
-    sendJson(res, 200, { token: token, user: publicUser(u) });
+    const payload = { user: publicUser(u), csrf: csrf };
+    if (String(req.headers["x-client"] || "") === "api") payload.token = token;   // 仅 API 客户端获取 Token
+    sendJson(res, 200, payload);
     return;
   }
 
@@ -784,16 +839,20 @@ async function handleApi(req, res, url) {
     }
     loginFailures.delete(accountKey);
     const token = createSession(u.id);
+    const csrf = issueCsrfToken();
+    setSessionCookies(req, res, token, csrf);
     saveDb();
     audit.log(u.role === "admin" ? "admin_login" : "login_success", { actorId: u.id, actorName: u.nickname, ip: ip, result: "ok" });
-    sendJson(res, 200, { token: token, user: publicUser(u) });
+    const payload = { user: publicUser(u), csrf: csrf };
+    if (String(req.headers["x-client"] || "") === "api") payload.token = token;
+    sendJson(res, 200, payload);
     return;
   }
 
   /* ---- 退出 ---- */
   if (p1 === "logout" && m === "POST") {
-    const header = req.headers["authorization"] || "";
-    const token = header.indexOf("Bearer ") === 0 ? header.slice(7).trim() : "";
+    const token = authToken(req).token;
+    clearSessionCookies(res);
     if (token && db.sessions[token]) {
       const sess = db.sessions[token];
       delete db.sessions[token];

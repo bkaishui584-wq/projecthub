@@ -215,6 +215,26 @@ Render、Railway、Fly.io、Zeabur、阿里云 / 腾讯云服务器等：
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 任意 OpenAI 兼容服务 |
 | `TAVILY_API_KEY` | 可选，联网检索 |
 
+## 会话与 API 认证说明
+
+浏览器端：
+
+- 登录/注册成功后，服务端下发 **HttpOnly + SameSite=Lax** 的会话 Cookie（JS 无法读取，XSS 偷不到 Token）；
+- 同时下发一个**非 HttpOnly 的 CSRF Cookie**，前端在所有写请求上以 `X-CSRF-Token` 头回传（双提交校验）；
+- 登出会清除两个 Cookie 并使会话失效；服务端**不再接受任何 URL 查询参数形式的凭据**。
+
+API 客户端（脚本 / 第三方集成）：
+
+```bash
+# 1) 登录时显式声明是 API 客户端，才会在响应中拿到 Token
+curl -X POST http://localhost:8787/api/login \
+  -H "Content-Type: application/json" -H "X-Client: api" \
+  -d '{"nickname":"your-account","password":"your-password"}'
+
+# 2) 之后用 Bearer 认证（无需 CSRF 头，因为没有浏览器环境）
+curl http://localhost:8787/api/me -H "Authorization: Bearer <token>"
+```
+
 ## 安全边界（已内置）
 
 服务端已建立可配置的基础安全边界，全部阈值可用环境变量覆盖（见 `.env.example`）：

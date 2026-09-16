@@ -69,12 +69,16 @@
       const raw = localStorage.getItem(USER_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      state.user = parsed.user || null;
-      state.token = parsed.token || "";
+      state.user = parsed.user || null;      // 仅缓存用户资料；会话凭据在 HttpOnly Cookie 中，JS 读不到
+      state.token = "";                      // 兼容旧数据：不再使用 localStorage 中的 Token
     } catch (e) {}
   }
   function saveSession() {
-    try { localStorage.setItem(USER_KEY, JSON.stringify({ user: state.user, token: state.token })); } catch (e) {}
+    try { localStorage.setItem(USER_KEY, JSON.stringify({ user: state.user })); } catch (e) {}
+  }
+  function csrfToken() {
+    const m = document.cookie.match(/(?:^|;\s*)ph_csrf=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
   }
   function clearSession() {
     state.user = null; state.token = ""; state.inbox = []; state.myApplications = [];
@@ -108,7 +112,7 @@
   }
 
   /* ================= 话题辅助 ================= */
-  const isLogged = () => !!(state.user && state.token);
+  const isLogged = () => !!(state.user && state.user.id);
   const isAdmin = () => !!(state.user && state.user.role === "admin");
   const isMember = (topic) => !!(state.user && topic.members.some((m) => m.id === state.user.id));
   const isLeader = (topic) => !!(state.user && (topic.creatorId === state.user.id || state.user.role === "admin"));
@@ -127,16 +131,20 @@
     const headers = {};
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    if (["POST", "PATCH", "DELETE"].indexOf(String(method).toUpperCase()) >= 0) {
+      const csrf = csrfToken();
+      if (csrf) headers["X-CSRF-Token"] = csrf;
+    }
     let res;
     try {
-      res = await fetch(path, { method: method, headers: headers, body: body !== undefined ? JSON.stringify(body) : undefined, cache: "no-store" });
+      res = await fetch(path, { method: method, headers: headers, credentials: "same-origin", body: body !== undefined ? JSON.stringify(body) : undefined, cache: "no-store" });
     } catch (e) {
       throw new Error("无法连接服务器，请检查网络");
     }
     let data = {};
     try { data = await res.json(); } catch (e) {}
     if (!res.ok) {
-      if (res.status === 401 && state.token) { clearSession(); renderHeader(); showToast("登录状态已失效，请重新登录"); }
+      if (res.status === 401 && state.user) { clearSession(); renderHeader(); showToast("登录状态已失效，请重新登录"); }
       const err = new Error(data.error || "请求失败"); err.status = res.status; throw err;
     }
     return data;
@@ -345,9 +353,10 @@
           const payload = { nickname: nickname, password: password };
           if (mode === "register") { payload.grade = grade; payload.directions = opts.directions || []; }
           const res = mode === "login" ? await Store.login(payload) : await Store.register(payload);
-          state.user = res.user; state.token = res.token; saveSession();
+          state.user = res.user; state.token = ""; saveSession();
           await loadPrivateData();
           renderPlaza();
+          ensureSse();
           hideModal();
           showToast(mode === "login" ? "登录成功，欢迎回来" : "注册成功，欢迎加入");
           if (opts.onDone) opts.onDone();
@@ -460,7 +469,8 @@
           btn.disabled = true; btn.textContent = "正在注册…";
           try {
             const res = await Store.register({ nickname: nickname, password: password, grade: grade, directions: d.directions });
-            state.user = res.user; state.token = res.token; saveSession();
+            state.user = res.user; state.token = ""; saveSession();
+            ensureSse();
             d.nickname = nickname; d.grade = grade;
             await loadPrivateData();
             go(3);
@@ -614,7 +624,7 @@
           btn.disabled = true; btn.textContent = "正在注册…";
           try {
             const res = await Store.register({ nickname: nickname, password: password, grade: grade, directions: d.directions });
-            state.user = res.user; state.token = res.token; saveSession();
+            state.user = res.user; state.token = ""; saveSession();
             await loadPrivateData();
             finishMember(d);
           } catch (e) {
@@ -628,6 +638,7 @@
     function finishMember() {
       hideModal();
       showPlaza();
+      if (d.mode !== "visitor") ensureSse();
       showToast(d.mode === "visitor" ? "已进入话题广场（游客模式）" : "欢迎来到话题广场");
     }
 
@@ -1056,7 +1067,7 @@
     const file = (state.files[topic.id] || []).find((f) => f.id === fileId);
     if (!file) return;
     try {
-      const res = await fetch(file.url, { headers: { Authorization: "Bearer " + state.token }, cache: "no-store" });
+      const res = await fetch(file.url, { credentials: "same-origin", cache: "no-store" });
       if (!res.ok) { showToast("下载失败（" + res.status + "）"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -1534,6 +1545,12 @@
   /* SSE：先用会话 Token 换取一次性短期票据，票据放进 URL 只用于建立连接 */
   let sseSource = null;
   let sseRetryTimer = null;
+
+  function ensureSse() {
+    if (!isLogged()) return;
+    if (sseSource) return;
+    connectSse();
+  }
 
   async function connectSse() {
     if (!isLogged()) return;
