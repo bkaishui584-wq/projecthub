@@ -469,3 +469,7 @@ em { font-style: normal; }
 .bell-row { cursor: pointer; }
 .bell-row:hover { border-color: var(--line-strong); }
 .bell-unread { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #FF7D8A; margin-right: 6px; }
+
+/* 组内文件：下载按钮（不再使用带 token 的链接） */
+.file-link { color: var(--blue); font-size: .88rem; word-break: break-all; text-align: left; }
+.file-link:hover { text-decoration: underline; }

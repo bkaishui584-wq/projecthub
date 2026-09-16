@@ -170,6 +170,7 @@
     aiDeep: (id) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/deep", {}),
     deleteFile: (topicId, fileId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/files/" + encodeURIComponent(fileId)),
     recallMessage: (topicId, msgId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/messages/" + encodeURIComponent(msgId)),
+    sseTicket: () => api("POST", "api/sse/ticket", {}),
     notifications: () => api("GET", "api/notifications"),
     readNotifications: (payload) => api("POST", "api/notifications/read", payload || { all: true }),
     adminUsers: () => api("GET", "api/admin/users"),
@@ -1027,11 +1028,33 @@
     const canManage = isLeader(topic);
     listEl.innerHTML = files.map((f) => {
       const canDel = canManage || (state.user && f.uploaderId === state.user.id);
-      return '<li class="file-item"><a href="' + f.url + '?token=' + encodeURIComponent(state.token) + '" target="_blank" rel="noopener">' + escapeHtml(f.name) + '</a>' +
+      return '<li class="file-item"><button class="file-link" type="button" data-dl-file="' + f.id + '">' + escapeHtml(f.name) + '</button>' +
         '<span>' + formatSize(f.size) + ' · ' + escapeHtml(f.uploaderName || "") +
         (canDel ? ' <button class="file-del" type="button" data-del-file="' + f.id + '">删除</button>' : '') + '</span></li>';
     }).join("");
+    listEl.querySelectorAll("[data-dl-file]").forEach((b) => b.addEventListener("click", () => downloadFile(topic, b.getAttribute("data-dl-file"))));
     listEl.querySelectorAll("[data-del-file]").forEach((b) => b.addEventListener("click", () => openDeleteFileModal(topic, b.getAttribute("data-del-file"))));
+  }
+
+  /* 通过 Authorization 头下载文件，绝不把会话 Token 放进 URL */
+  async function downloadFile(topic, fileId) {
+    const file = (state.files[topic.id] || []).find((f) => f.id === fileId);
+    if (!file) return;
+    try {
+      const res = await fetch(file.url, { headers: { Authorization: "Bearer " + state.token }, cache: "no-store" });
+      if (!res.ok) { showToast("下载失败（" + res.status + "）"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.name || "file";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 30000);
+    } catch (e) {
+      showToast("下载失败，请稍后重试");
+    }
   }
 
   function openDeleteFileModal(topic, fileId) {
@@ -1416,6 +1439,7 @@
     $("#btn-logout").addEventListener("click", async () => {
       try { await Store.logout(); } catch (e) {}
       clearSession();
+      if (sseSource) { try { sseSource.close(); } catch (e) {} sseSource = null; }
       renderPlaza();
       showToast("已退出登录");
       openRoleModal();
@@ -1454,6 +1478,30 @@
     modalOverlay.addEventListener("click", (e) => { if (e.target === modalOverlay && modalClosable) hideModal(); });
   }
 
+  /* SSE：先用会话 Token 换取一次性短期票据，票据放进 URL 只用于建立连接 */
+  let sseSource = null;
+  let sseRetryTimer = null;
+
+  async function connectSse() {
+    if (!isLogged()) return;
+    try {
+      const r = await Store.sseTicket();
+      if (sseSource) { try { sseSource.close(); } catch (e) {} }
+      const es = new EventSource("api/events?ticket=" + encodeURIComponent(r.ticket));
+      sseSource = es;
+      ["topics", "message", "applications", "files", "ai", "notify"].forEach((ev) => es.addEventListener(ev, refreshAll));
+      es.addEventListener("error", () => {
+        try { es.close(); } catch (e) {}
+        sseSource = null;
+        clearTimeout(sseRetryTimer);
+        sseRetryTimer = setTimeout(connectSse, 5000);
+      });
+    } catch (e) {
+      clearTimeout(sseRetryTimer);
+      sseRetryTimer = setTimeout(connectSse, 8000);
+    }
+  }
+
   async function init() {
     loadSession();
     bindEvents();
@@ -1469,14 +1517,7 @@
       }
       renderPlaza();
       if (!isLogged()) openRoleModal();
-      try {
-        const es = new EventSource("api/events");
-        es.addEventListener("topics", refreshAll);
-        es.addEventListener("message", refreshAll);
-        es.addEventListener("applications", refreshAll);
-        es.addEventListener("files", refreshAll);
-        es.addEventListener("ai", refreshAll);
-      } catch (e) {}
+      connectSse();
       setInterval(refreshAll, 5000);
       document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
     } catch (e) {
