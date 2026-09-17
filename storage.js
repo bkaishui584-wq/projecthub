@@ -5,6 +5,14 @@ const path = require("path");
 const crypto = require("crypto");
 
 const SCHEMA_VERSION = 1;
+
+class StorageConflictError extends Error {
+  constructor(message) {
+    super(message || "存储版本冲突，另一个实例已经写入更新数据");
+    this.name = "StorageConflictError";
+    this.code = "STORAGE_CONFLICT";
+  }
+}
 const SAFE_FILE_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
 
 function assertFileKey(key) {
@@ -144,6 +152,8 @@ class PostgresStore {
     this.pool = options.pool || null;
     this.ownsPool = !options.pool;
     this.migratedFromLegacy = false;
+    this.revision = 0;
+    this.hasState = false;
   }
 
   async init() {
@@ -164,9 +174,11 @@ class PostgresStore {
         id smallint PRIMARY KEY CHECK (id = 1),
         schema_version integer NOT NULL,
         state jsonb NOT NULL,
+        revision bigint NOT NULL DEFAULT 0,
         updated_at timestamptz NOT NULL DEFAULT now()
       )
     `);
+    await this.pool.query(`ALTER TABLE projecthub_state ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 0`);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS projecthub_file_blobs (
         key text PRIMARY KEY,
@@ -177,30 +189,63 @@ class PostgresStore {
   }
 
   async loadState() {
-    const result = await this.pool.query("SELECT state, schema_version, updated_at FROM projecthub_state WHERE id = 1");
+    const result = await this.pool.query("SELECT state, schema_version, updated_at, revision FROM projecthub_state WHERE id = 1");
     if (result.rows && result.rows[0]) {
       const state = result.rows[0].state;
       if (!state || typeof state !== "object" || Array.isArray(state)) throw new Error("PostgreSQL 中的 state 不是对象");
+      this.revision = Number(result.rows[0].revision || 0);
+      this.hasState = true;
       return state;
     }
     const legacy = readJsonFile(this.legacyDataFile);
-    if (!legacy) return null;
+    if (!legacy) { this.hasState = false; this.revision = 0; return null; }
     await this.saveState(legacy);
     this.migratedFromLegacy = true;
     return legacy;
   }
 
+  async reloadRevision() {
+    const current = await this.pool.query("SELECT revision FROM projecthub_state WHERE id = 1");
+    if (current.rows && current.rows[0]) {
+      this.revision = Number(current.rows[0].revision || 0);
+      this.hasState = true;
+    } else {
+      this.revision = 0;
+      this.hasState = false;
+    }
+  }
+
   async saveState(state) {
     const serialized = JSON.stringify(state);
-    await this.pool.query(
-      `INSERT INTO projecthub_state (id, schema_version, state, updated_at)
-       VALUES (1, $1, $2::jsonb, now())
-       ON CONFLICT (id) DO UPDATE
-       SET schema_version = EXCLUDED.schema_version,
-           state = EXCLUDED.state,
-           updated_at = now()`,
-      [SCHEMA_VERSION, serialized]
+    if (!this.hasState) {
+      const inserted = await this.pool.query(
+        `INSERT INTO projecthub_state (id, schema_version, state, revision, updated_at)
+         VALUES (1, $1, $2::jsonb, 1, now())
+         ON CONFLICT (id) DO NOTHING
+         RETURNING revision`,
+        [SCHEMA_VERSION, serialized]
+      );
+      if (inserted.rows && inserted.rows[0]) {
+        this.revision = Number(inserted.rows[0].revision || 1);
+        this.hasState = true;
+        return;
+      }
+      await this.reloadRevision();
+      throw new StorageConflictError();
+    }
+    const expected = this.revision;
+    const updated = await this.pool.query(
+      `UPDATE projecthub_state
+       SET schema_version = $1, state = $2::jsonb, revision = revision + 1, updated_at = now()
+       WHERE id = 1 AND revision = $3
+       RETURNING revision`,
+      [SCHEMA_VERSION, serialized, expected]
     );
+    if (!updated.rows || !updated.rows[0]) {
+      await this.reloadRevision();
+      throw new StorageConflictError();
+    }
+    this.revision = Number(updated.rows[0].revision);
   }
 
   async saveFile(key, buffer) {
@@ -287,4 +332,4 @@ async function createStorage(options) {
   return store;
 }
 
-module.exports = { SCHEMA_VERSION, FileStore, PostgresStore, createStorage, readJsonFile, atomicWriteFile };
+module.exports = { SCHEMA_VERSION, StorageConflictError, FileStore, PostgresStore, createStorage, readJsonFile, atomicWriteFile };

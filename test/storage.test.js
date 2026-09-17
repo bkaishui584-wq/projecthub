@@ -19,16 +19,25 @@ class FakePool {
   }
   async query(text, params) {
     const sql = String(text).replace(/\s+/g, " ").trim();
-    if (sql.startsWith("CREATE TABLE")) return { rows: [] };
+    if (sql.startsWith("CREATE TABLE") || sql.startsWith("ALTER TABLE")) return { rows: [] };
     if (sql.startsWith("INSERT INTO projecthub_state")) {
-      this.stateRow = { state: JSON.parse(params[1]), schema_version: params[0] };
-      return { rows: [] };
+      if (this.stateRow) return { rows: [] };
+      this.stateRow = { state: JSON.parse(params[1]), schema_version: params[0], revision: 1 };
+      return { rows: [{ revision: 1 }] };
+    }
+    if (sql.startsWith("UPDATE projecthub_state")) {
+      if (!this.stateRow || Number(this.stateRow.revision) !== Number(params[2])) return { rows: [] };
+      this.stateRow = { state: JSON.parse(params[1]), schema_version: params[0], revision: Number(this.stateRow.revision) + 1 };
+      return { rows: [{ revision: this.stateRow.revision }] };
     }
     if (sql.startsWith("SELECT state, schema_version")) {
       return { rows: this.stateRow ? [this.stateRow] : [] };
     }
     if (sql.startsWith("SELECT state FROM projecthub_state")) {
       return { rows: this.stateRow ? [{ state: this.stateRow.state }] : [] };
+    }
+    if (sql.startsWith("SELECT revision FROM projecthub_state")) {
+      return { rows: this.stateRow ? [{ revision: this.stateRow.revision }] : [] };
     }
     if (sql.startsWith("SELECT count(*)::int")) {
       let bytes = 0;
@@ -103,6 +112,25 @@ test("PostgresStore reads and writes state and file blobs through parameterized 
     assert.equal((await store.health()).ok, true);
     const stats = await store.stats();
     assert.equal(stats.fileCount, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("PostgresStore rejects stale writes from another instance", async () => {
+  const dir = tempDir();
+  try {
+    const pool = new FakePool();
+    const first = new PostgresStore({ pool: pool, legacyDataFile: path.join(dir, "missing.json"), filesDir: path.join(dir, "files") });
+    const second = new PostgresStore({ pool: pool, legacyDataFile: path.join(dir, "missing.json"), filesDir: path.join(dir, "files") });
+    await first.init();
+    await second.init();
+    assert.equal(await first.loadState(), null);
+    await first.saveState({ version: 1 });
+    assert.equal((await second.loadState()).version, 1);
+    await first.saveState({ version: 2 });
+    await assert.rejects(() => second.saveState({ version: 99 }), /版本冲突/);
+    assert.equal((await first.loadState()).version, 2);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
