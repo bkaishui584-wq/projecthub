@@ -2,7 +2,7 @@
 
 - 正式网址：https://projecthub-7ul0.onrender.com
 - Git 分支：`main`
-- 最近成功部署提交：`6a938fd`
+- 最新生产部署：包含 revision 乐观锁与旧实例覆盖修复
 - Web Service：Docker / Render / Oregon
 - 数据库：Render PostgreSQL / Oregon / Free
 - 存储驱动：`postgres`
