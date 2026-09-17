@@ -9,7 +9,7 @@
 - `storage.js` 提供统一存储接口。
 - `STORAGE_DRIVER=auto` 时：有 `DATABASE_URL` 使用 PostgreSQL，没有则使用 JSON 文件。
 - 生产环境默认拒绝 JSON 文件存储，除非显式设置 `ALLOW_EPHEMERAL_STORAGE=1`。
-- PostgreSQL 使用两张表：
+- PostgreSQL 使用两张表，并通过 revision 乐观锁阻止滚动部署中的旧实例覆盖新数据：
   - `projecthub_state`：保存当前完整状态快照，`id = 1`，字段为 `schema_version` 和 `state jsonb`。
   - `projecthub_file_blobs`：保存上传文件内容，字段为 `key`、`content bytea`、`updated_at`。
 - 首次连接空数据库时，自动读取现有 `data/store.json` 并写入 `projecthub_state`。
