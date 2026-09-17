@@ -38,16 +38,20 @@ async function main() {
     if (remoteCounts.topics || remoteCounts.messages || remoteCounts.applications) {
       throw new Error("远程数据库已有项目、消息或申请数据，拒绝自动导入；请改用人工迁移");
     }
-    const remoteAdmins = Object.values((remote && remote.users) || {}).filter((u) => u && u.role === "admin");
-    if (remoteCounts.users > 1 || (remoteCounts.users === 1 && remoteAdmins.length !== 1)) {
-      throw new Error("远程数据库已有非管理员用户，拒绝自动覆盖");
-    }
+    const remoteUsers = Object.values((remote && remote.users) || {}).filter((u) => u && typeof u === "object");
     const merged = JSON.parse(JSON.stringify(local));
     merged.users = merged.users && typeof merged.users === "object" ? merged.users : {};
     for (const key of Object.keys(merged.users)) {
       if (merged.users[key] && merged.users[key].role === "admin") delete merged.users[key];
     }
-    if (remoteAdmins[0]) merged.users[remoteAdmins[0].id] = remoteAdmins[0];
+    for (const remoteUser of remoteUsers) {
+      const nickname = String(remoteUser.nicknameLower || remoteUser.nickname || "").toLowerCase();
+      for (const key of Object.keys(merged.users)) {
+        const localName = String(merged.users[key].nicknameLower || merged.users[key].nickname || "").toLowerCase();
+        if (nickname && localName === nickname) delete merged.users[key];
+      }
+      merged.users[remoteUser.id] = remoteUser;
+    }
     merged.sessions = {};
     await store.saveState(merged);
     let filesMigrated = 0;

@@ -190,6 +190,7 @@ STORAGE_DRIVER=auto
 ```
 
 - 有 `DATABASE_URL`：使用 PostgreSQL，应用重启或重新部署不影响数据。
+- PostgreSQL 使用 revision 乐观锁，旧实例不能覆盖新实例已写入的数据。
 - 没有数据库且是生产环境：服务拒绝启动，避免把数据静默写入临时文件系统。
 - 本地开发/测试：可以显式设置 `STORAGE_DRIVER=file` 和 `ALLOW_EPHEMERAL_STORAGE=1`。
 - 旧 JSON 模式仍保留为迁移和回滚路径，但不再作为生产持久化方案。

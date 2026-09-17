@@ -2,7 +2,7 @@
 
 - 正式网址：https://projecthub-7ul0.onrender.com
 - Git 分支：`main`
-- 最近成功部署提交：`19a631f`
+- 最近成功部署提交：`1151de1`
 - Web Service：Docker / Render / Oregon
 - 数据库：Render PostgreSQL / Oregon / Free
 - 存储驱动：`postgres`
@@ -10,7 +10,7 @@
 - 健康检查：通过
 - 管理员新密码：已与数据库同步，验证登录返回 200
 - 线上数据：2 个用户、2 个项目、3 条消息、1 条申请
-- 重启验收：服务重启后项目和聊天数据仍存在
+- 重启验收：连续两次重启后，2 个项目仍存在，未再发生旧实例覆盖新数据
 
 ## 需要注意
 
