@@ -1,12 +1,12 @@
 # Render 部署蓝图：https://render.com
-# 用法：把项目推到 Git 仓库 → Render 新建 Blueprint → 选择该仓库 → 按提示填 ADMIN_PASSWORD
+# 用法：把项目推到 Git 仓库 → Render 新建 Blueprint → 关联 PostgreSQL → 填 ADMIN_PASSWORD
 services:
   - type: web
     name: projecthub
     runtime: node
-    plan: free                 # 免费实例：网址永久固定，但闲置 15 分钟会休眠，首次访问需等待约 30 秒
+    plan: free                 # 免费实例会休眠；数据库必须独立于 Web Service
     region: singapore
-    buildCommand: npm install --omit=dev
+    buildCommand: npm ci --omit=dev
     startCommand: node server.js
     healthCheckPath: /api/health
     autoDeploy: true
@@ -15,15 +15,17 @@ services:
         value: production
       - key: TRUST_PROXY
         value: "1"
+      - key: STORAGE_DRIVER
+        value: auto
+      - key: DATABASE_URL
+        sync: false            # 在 Render 中关联 PostgreSQL，或填写外部 PostgreSQL URL
+      - key: DATABASE_SSL
+        value: require
       - key: ADMIN_NICKNAME
         value: 白开水
       - key: ADMIN_PASSWORD
         sync: false            # 在 Render 控制台里填写，不写入仓库
       - key: ALLOWED_ORIGINS
         value: ""
-    # 免费实例磁盘是临时的：重新部署/重启会清空 data/
-    # 需要长期保存数据：升级为付费实例并启用下面的磁盘挂载
-    # disk:
-    #   name: projecthub-data
-    #   mountPath: /app/data
-    #   sizeGB: 1
+    # 生产环境不会使用 Render 临时文件系统保存数据。
+    # 必须配置 DATABASE_URL；首次启动会把旧 data/store.json 导入 PostgreSQL。

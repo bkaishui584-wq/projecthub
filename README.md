@@ -5,7 +5,7 @@
 ## 聊天界面功能
 
 - **消息引用**：鼠标移到任意消息上，点「引用」即可带着原文回复
-- **消息撤回**：自己发的消息可以撤回（负责人可撤回群内任意消息），撤回后显示「撤回了一条消息」
+- **消息撤回**：只有消息作者本人可以撤回自己的消息，撤回后显示「撤回了一条消息」
 - **复制消息**：一键复制某条消息内容
 - **@ 成员**：点输入框左侧的 @ 按钮，或在输入框里打 @，会弹出成员列表；被 @ 的人会收到专门提醒
 - **组内文件**：可上传 Word / jpg / png，上传者和负责人都能删除文件
@@ -145,31 +145,65 @@ node server.js --rotate-admin-password
 node server.js
 ```
 
+本地开发使用 JSON 文件存储；生产环境必须使用 PostgreSQL。
+
+```powershell
+$env:NODE_ENV="development"
+$env:STORAGE_DRIVER="file"
+$env:ALLOW_EPHEMERAL_STORAGE="1"
+node server.js
+```
+
 然后打开： http://localhost:8787
 
 端口可通过环境变量修改：
 
-```bash
-PORT=3000 node server.js
+```powershell
+$env:PORT="3000"
+node server.js
 ```
 
-## 数据存储
+## 数据存储与恢复
 
-所有账号、项目、申请、聊天记录和文件元数据都保存在 `data/store.json`，
-上传的文件保存在 `data/files/`，服务器重启后数据仍在。删除 `data/` 目录即可清空所有数据。
+部署前可以先把本机旧数据迁入 PostgreSQL：
+
+```powershell
+$env:NODE_ENV="production"
+$env:STORAGE_DRIVER="auto"
+$env:DATABASE_URL="postgresql://..."
+$env:DATABASE_SSL="require"
+npm run db:migrate
+npm run db:check
+```
+
+`db:migrate` 会把本机 `data/store.json` 和 `data/files/` 导入空数据库；数据库已经有数据时不会覆盖，只会补齐缺失的上传文件。
+
+生产环境必须使用独立 PostgreSQL。首次启动且数据库为空时，服务会把现有
+`data/store.json` 导入 `projecthub_state`，并把 `data/files/` 中已有的上传文件
+导入 `projecthub_file_blobs`；原文件不会删除，可用于回滚。
+
+```text
+DATABASE_URL=postgresql://user:password@host:5432/projecthub
+DATABASE_SSL=require
+STORAGE_DRIVER=auto
+```
+
+- 有 `DATABASE_URL`：使用 PostgreSQL，应用重启或重新部署不影响数据。
+- 没有数据库且是生产环境：服务拒绝启动，避免把数据静默写入临时文件系统。
+- 本地开发/测试：可以显式设置 `STORAGE_DRIVER=file` 和 `ALLOW_EPHEMERAL_STORAGE=1`。
+- 旧 JSON 模式仍保留为迁移和回滚路径，但不再作为生产持久化方案。
 
 ## 部署到公网（让其他人访问）
 
-这是一个标准的 Node.js 应用，可以部署到任何支持 Node 的平台，例如
-Render、Railway、Fly.io、Zeabur、阿里云 / 腾讯云服务器等：
+这是一个标准 Node.js 应用。Render Blueprint 已配置为生产环境使用 PostgreSQL：
 
-1. 把整个项目上传到代码仓库（GitHub / Gitee 均可）；
-2. 在平台上新建 Web Service，启动命令填 `node server.js`；
-3. 平台会自动注入 `PORT` 环境变量，无需额外配置；
-4. 部署完成后得到的域名，就是其他人可以访问和加入的网址。
+1. 把项目推送到 GitHub/Gitee；
+2. 在 Render 创建 Blueprint；
+3. 创建或关联独立 PostgreSQL，并把连接串放入 `DATABASE_URL`；
+4. 设置 `ADMIN_PASSWORD`；
+5. 部署后先验证 `/api/health`，再检查用户、项目和消息能在重新部署后保留。
 
-> 注意：`data/` 是运行时数据，已经在 `.gitignore` 中忽略。
-> 如果需要持久化存储，请在平台上挂载磁盘，或把数据换成数据库。
+不要把 Web Service 的临时磁盘当作正式数据库。
 
 ## 临时公网链接（本机）
 
@@ -183,14 +217,18 @@ Render、Railway、Fly.io、Zeabur、阿里云 / 腾讯云服务器等：
 ├── index.html            前端页面结构（单页应用）
 ├── styles.css            前端样式
 ├── script.js             前端交互：登录注册、广场、申请、聊天、文件、标签、AI 面板、通知
-├── server.js             后端：Node 内置模块实现，含账号/权限/项目/消息/文件/通知 API + SSE
+├── server.js             后端：账号/权限/项目/消息/文件/通知 API + SSE
 ├── ai.js                 AI 调用层：本机开源模型自动发现 + DeepSeek / OpenAI / 兼容接口 + 本地回退
-├── package.json          项目信息与启动脚本（零第三方依赖）
+├── storage.js            JSON/PostgreSQL 持久化层 + 文件 Blob 存储
+├── package.json          项目信息、依赖与测试脚本
+├── package-lock.json     依赖锁定文件
+├── test/                 自动化测试
+├── scripts/db-check.js   部署后存储与数据数量检查
 ├── .env.example          环境变量示例（仅占位符，不含真实密钥）
 ├── Dockerfile            容器镜像构建
-├── docker-compose.yml    一键容器部署（数据挂载到 ./data）
+├── docker-compose.yml    一键容器部署
 ├── start-public.ps1      Windows 一键启动本地服务 + 临时公网隧道
-├── data/                 运行时数据目录（自动生成，已在 .gitignore 忽略）
+├── data/                 旧版 JSON 数据目录（仅迁移/本地开发）
 ├── README.md             说明文档
 └── .gitignore / .dockerignore
 ```
@@ -205,6 +243,10 @@ Render、Railway、Fly.io、Zeabur、阿里云 / 腾讯云服务器等：
 | 变量 | 说明 |
 | --- | --- |
 | `PORT` | 服务端口，默认 8787 |
+| `STORAGE_DRIVER` | `auto` / `postgres` / `file`；生产环境应使用 `auto` 或 `postgres` |
+| `DATABASE_URL` | PostgreSQL 连接串；生产环境必填 |
+| `DATABASE_SSL` | PostgreSQL SSL 模式：`require`、`verify-full` 或 `disable` |
+| `ALLOW_EPHEMERAL_STORAGE` | 仅开发/测试或明确接受数据丢失时设为 `1`；生产默认拒绝临时文件 |
 | `ADMIN_NICKNAME` / `ADMIN_PASSWORD` | 管理员昵称与初始密码；密码**必须**由环境变量提供，代码与文档中不含任何默认密码 |
 | `ALLOWED_ORIGINS` | 允许跨域的 Origin 白名单（逗号分隔）；留空表示不开放跨域 |
 | `TRUST_PROXY` | 置于 Nginx / Cloudflare 之后时设为 `1`，以便限流与审计使用真实 IP |
@@ -256,16 +298,7 @@ curl http://localhost:8787/api/me -H "Authorization: Bearer <token>"
 - 仓库与压缩包中**不包含任何真实密钥**：没有 `.env`，代码只读取环境变量；
 - `data/` 目录是运行时数据（账号、密码哈希、聊天记录、上传文件），已在 `.gitignore` 中忽略，**打包时不会带出**；
 - 密码使用 Node `crypto.scryptSync` 加盐哈希存储，API 返回的用户对象不含密码字段；
-- 管理员账号默认密码写在代码里作为兜底，**上线前请通过 `ADMIN_PASSWORD` 环境变量覆盖**；
-- 项目当前不含 HTTPS、邮箱验证、验证码、登录失败锁定等生产能力，如需正式对外请在此基础上加固。
-
-## 目录结构
-
-```
-index.html       页面结构
-styles.css       样式
-script.js        前端交互（登录、申请、聊天、文件、标签、管理后台）
-server.js        Node 服务器：账号系统 + 数据 API + 文件上传 + SSE 实时同步
-data/store.json  运行时数据（自动生成）
-start-public.ps1 一键启动本地服务 + 临时公网链接
-```
+- 管理员密码只从环境变量读取，代码和示例文件中不存在真实默认密码；
+- 历史上泄露过的管理员密码一律视为无效，必须显式轮换；
+- 生产环境默认禁止使用临时文件存储，必须配置独立 PostgreSQL；
+- 当前仍建议在外层使用 HTTPS、验证码/邮件验证和正式备份服务后再扩大公开范围。

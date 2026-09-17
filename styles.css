@@ -185,8 +185,8 @@ em { font-style: normal; }
 .chat-form input:focus { outline: none; border-color: var(--line-strong); }
 
 /* ===== Modal ===== */
-.modal-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; background: rgba(4,7,16,.7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-.modal { position: relative; width: min(760px, 100%); max-height: min(90vh, 820px); overflow-y: auto; background: var(--ink-1); border: 1px solid var(--line-strong); border-radius: 22px; box-shadow: var(--shadow); padding: 30px 32px; }
+.modal-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); background: rgba(4,7,16,.7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.modal { position: relative; width: min(760px, calc(100vw - 32px)); max-width: 100%; max-height: min(90vh, 820px); overflow-y: auto; overflow-wrap: anywhere; background: var(--ink-1); border: 1px solid var(--line-strong); border-radius: 22px; box-shadow: var(--shadow); padding: 30px 32px; }
 .modal-close { position: absolute; top: 16px; right: 18px; width: 34px; height: 34px; border-radius: 50%; color: var(--text-muted); background: rgba(255,255,255,.04); font-size: 1.2rem; line-height: 1; }
 .modal-close:hover { color: var(--text); background: rgba(255,255,255,.08); }
 
@@ -261,7 +261,8 @@ em { font-style: normal; }
   .chat-side { border-right: 0; border-bottom: 1px solid var(--line); }
   .chat-main { height: 70vh; }
   .form-row { grid-template-columns: 1fr; }
-  .modal { padding: 22px 18px; }
+  .modal-overlay { padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .modal { width: 100%; max-height: calc(100dvh - 20px); border-radius: 18px; padding: 22px 18px; }
   .modal-title { font-size: 1.25rem; }
 }
 
@@ -421,6 +422,10 @@ em { font-style: normal; }
 
 /* ===== 新版聊天布局：聊天区为主，成员/文件收进抽屉 ===== */
 .chat-shell { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h)); min-height: 520px; }
+@supports (height: 100dvh) {
+  .chat-layout { height: calc(100dvh - var(--topbar-h)); }
+  .chat-shell { height: calc(100dvh - var(--topbar-h)); }
+}
 .chat-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--ink-1); }
 .chat-head-main { flex: 1; min-width: 0; }
 .chat-head-main h2 { font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -449,7 +454,7 @@ em { font-style: normal; }
 .reply-bar { display: flex; align-items: center; gap: 10px; margin: 10px 16px 0; padding: 8px 12px; border-radius: 10px; background: rgba(91,140,255,.08); border-left: 3px solid var(--blue); font-size: .84rem; color: var(--text-muted); }
 .reply-bar strong { color: var(--text); }
 .reply-bar button { margin-left: auto; color: var(--text-dim); }
-.composer { display: flex; align-items: center; gap: 10px; padding: 10px 16px 14px; }
+.composer { display: flex; align-items: center; gap: 10px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
 .composer input { flex: 1; padding: 11px 15px; border-radius: 11px; background: rgba(255,255,255,.04); border: 1px solid var(--line); color: var(--text); }
 .composer input:focus { outline: none; border-color: var(--line-strong); }
 .chat-form { position: relative; border-top: 1px solid var(--line); background: var(--ink-1); }

@@ -14,6 +14,11 @@ services:
       ADMIN_NICKNAME: "${ADMIN_NICKNAME:-白开水}"
       # 按需设置允许跨域的来源（同源部署可留空）
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+      # 推荐生产环境使用独立 PostgreSQL：DATABASE_URL=postgresql://...
+      STORAGE_DRIVER: "${STORAGE_DRIVER:-file}"
+      ALLOW_EPHEMERAL_STORAGE: "${ALLOW_EPHEMERAL_STORAGE:-1}"
+      DATABASE_URL: "${DATABASE_URL:-}"
+      DATABASE_SSL: "${DATABASE_SSL:-disable}"
       # 需要接入大模型时再打开
       # DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
     volumes:

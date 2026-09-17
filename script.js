@@ -43,6 +43,7 @@
   const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const formatSize = (n) => (n < 1024 ? n + " B" : (n < 1024 * 1024 ? (n / 1024).toFixed(1) + " KB" : (n / 1024 / 1024).toFixed(1) + " MB"));
   const formatDate = (ts) => { try { return new Date(ts).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
+  const formatTime = (ts) => { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
 
   /* ================= 状态与本地存储 ================= */
   const USER_KEY = "projecthub_session_v3";
@@ -160,6 +161,7 @@
     createTopic: (p) => api("POST", "api/topics", p),
     deleteTopic: (id) => api("DELETE", "api/topics/" + encodeURIComponent(id)),
     apply: (id, p) => api("POST", "api/topics/" + encodeURIComponent(id) + "/applications", p),
+    cancelApplication: (id) => api("DELETE", "api/topics/" + encodeURIComponent(id) + "/applications"),
     inbox: () => api("GET", "api/inbox"),
     myApplications: () => api("GET", "api/my-applications"),
     decide: (id, action) => api("POST", "api/applications/" + encodeURIComponent(id) + "/" + action, {}),
@@ -177,6 +179,7 @@
     aiClose: (id) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/close", {}),
     aiDeep: (id) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/deep", {}),
     deleteFile: (topicId, fileId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/files/" + encodeURIComponent(fileId)),
+    editMessage: (topicId, msgId, text) => api("PATCH", "api/topics/" + encodeURIComponent(topicId) + "/messages/" + encodeURIComponent(msgId), { text: text }),
     recallMessage: (topicId, msgId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/messages/" + encodeURIComponent(msgId)),
     sseTicket: () => api("POST", "api/sse/ticket", {}),
     report: (payload) => api("POST", "api/reports", payload),
@@ -245,11 +248,12 @@
     const member = isMember(t);
     const leader = isLeader(t);
     const appStatus = myAppStatus(t.id);
-    const full = !member && t.members.length >= t.limit;
-    let label = "申请加入", cls = "btn-ghost", disabled = "";
+    const memberCount = Number.isFinite(t.memberCount) ? t.memberCount : t.members.length;
+    const full = !member && memberCount >= t.limit;
+    let label = "申请加入", cls = "btn-ghost", disabled = "", actionAttr = 'data-open="' + t.id + '"';
     if (member) { label = "进入话题"; cls = "btn-primary"; }
     else if (full) { label = "已满员"; disabled = " disabled"; }
-    else if (appStatus === "pending") { label = "申请中，等待负责人"; disabled = " disabled"; }
+    else if (appStatus === "pending") { label = "取消申请"; cls = "btn-danger"; actionAttr = 'data-cancel-app="' + t.id + '"'; }
     else if (appStatus === "rejected") { label = "重新申请"; }
 
     return '<article class="topic-card">' +
@@ -261,7 +265,7 @@
       '<p class="topic-roles">需要角色：' + need + '</p>' + missHtml +
       '<div class="topic-foot"><span class="topic-owner">' + (t.memberHidden ? '负责人 · <strong>（私密项目）</strong>' : '负责人 · <strong>' + escapeHtml(t.members[0] ? t.members[0].nickname : "—") + '</strong>') + '</span>' +
       '<span class="topic-actions">' +
-        '<button class="btn ' + cls + ' btn-small" type="button" data-open="' + t.id + '"' + disabled + '>' + label + '</button>' +
+        '<button class="btn ' + cls + ' btn-small" type="button" ' + actionAttr + disabled + '>' + label + '</button>' +
         (leader ? '<button class="btn btn-danger btn-small" type="button" data-delete="' + t.id + '">删除</button>' : '') +
       '</span></div></article>';
   }
@@ -280,7 +284,7 @@
     });
 
     $("#stat-topics").textContent = state.topics.length;
-    $("#stat-members").textContent = state.topics.reduce((n, t) => n + t.members.length, 0);
+    $("#stat-members").textContent = state.topics.reduce((n, t) => n + (Number.isFinite(t.memberCount) ? t.memberCount : t.members.length), 0);
     $("#result-count").textContent = "共 " + list.length + " 个项目";
 
     grid.innerHTML = list.map(topicCard).join("");
@@ -302,6 +306,12 @@
 
     grid.querySelectorAll("[data-open]").forEach((b) => {
       b.addEventListener("click", () => handleOpenTopic(b.getAttribute("data-open")));
+    });
+    grid.querySelectorAll("[data-cancel-app]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const topic = state.topics.find((t) => t.id === b.getAttribute("data-cancel-app"));
+        if (topic) openCancelApplicationModal(topic);
+      });
     });
     grid.querySelectorAll("[data-delete]").forEach((b) => {
       b.addEventListener("click", () => {
@@ -660,6 +670,24 @@
     openApplyModal(topic);
   }
 
+  function openCancelApplicationModal(topic) {
+    showModal('<h2 class="modal-title">取消加入申请？</h2><p class="modal-sub">取消后，负责人将不再看到你的待处理申请。冷却结束后可以重新申请。</p>' +
+      '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-cancel>继续等待</button><button class="btn btn-danger" type="button" data-confirm>确认取消</button></div>', true);
+    const box = modalContent;
+    box.querySelector("[data-cancel]").addEventListener("click", hideModal);
+    box.querySelector("[data-confirm]").addEventListener("click", async () => {
+      try {
+        await Store.cancelApplication(topic.id);
+        await loadPrivateData();
+        await refreshTopicList();
+        hideModal();
+        showToast("已取消加入申请");
+      } catch (e) {
+        showToast(e.message || "取消失败");
+      }
+    });
+  }
+
   function openApplyModal(topic) {
     const privateTopic = topic.type === "private";
     showModal(
@@ -882,17 +910,18 @@
     const member = topic.members.find((x) => x.id === m.author);
     const name = mine ? (state.user.nickname || "我") : (m.authorName || (member ? member.nickname : "同学"));
     const role = (member && member.id === topic.creatorId) ? "负责人" : "";
+    const timeText = m.at ? formatTime(m.at) : (m.time || "");
     const div = document.createElement("div");
 
     if (m.recalled) {
       div.className = "msg is-recalled" + (mine ? " mine" : "");
       div.innerHTML = '<div class="msg-author">' + escapeHtml(name) + '</div>' +
         '<div class="bubble">' + escapeHtml(mine ? "你撤回了一条消息" : (name + " 撤回了一条消息")) + '</div>' +
-        '<div class="msg-time">' + escapeHtml(m.time || "") + '</div>';
+        '<div class="msg-time">' + escapeHtml(timeText) + '</div>';
       return div;
     }
 
-    const canRecall = mine || isLeader(topic);
+    const canRecall = mine;
     div.className = "msg" + (mine ? " mine" : "");
     div.innerHTML =
       '<div class="msg-author">' + escapeHtml(name) +
@@ -900,10 +929,11 @@
         (role ? '<span class="role">' + role + '</span>' : "") + '</div>' +
       (m.replyTo ? '<div class="msg-quote">引用 ' + escapeHtml(m.replyTo.authorName || "") + '：' + escapeHtml(m.replyTo.text || "") + '</div>' : "") +
       '<div class="bubble">' + highlightMentions(m.text, topic) + '</div>' +
-      '<div class="msg-time">' + escapeHtml(m.time || "") + '</div>' +
+      '<div class="msg-time">' + escapeHtml(timeText) + (m.edited ? " · 已编辑" : "") + '</div>' +
       '<div class="msg-actions">' +
         '<button type="button" data-act="quote" data-id="' + m.id + '">引用</button>' +
         '<button type="button" data-act="copy" data-id="' + m.id + '">复制</button>' +
+        (mine ? '<button type="button" data-act="edit" data-id="' + m.id + '">编辑</button>' : '') +
         (canRecall ? '<button type="button" data-act="recall" data-id="' + m.id + '">撤回</button>' : '') +
       '</div>';
     return div;
@@ -920,9 +950,34 @@
     } else if (act === "copy") {
       try { await navigator.clipboard.writeText(msg.text || ""); showToast("已复制这条消息"); }
       catch (e) { showToast("复制失败，请手动选择文字复制"); }
+    } else if (act === "edit") {
+      openEditMessageModal(topic, msg);
     } else if (act === "recall") {
       openRecallModal(topic, msg);
     }
+  }
+
+  function openEditMessageModal(topic, msg) {
+    showModal('<h2 class="modal-title">编辑这条消息</h2><div class="field"><textarea class="textarea js-edit-text" maxlength="1000"></textarea></div>' +
+      '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-cancel>取消</button><button class="btn btn-primary" type="button" data-confirm>保存修改</button></div>', true);
+    const box = modalContent;
+    const input = box.querySelector(".js-edit-text");
+    input.value = msg.text || "";
+    input.focus();
+    box.querySelector("[data-cancel]").addEventListener("click", hideModal);
+    box.querySelector("[data-confirm]").addEventListener("click", async () => {
+      const text = input.value.trim();
+      if (!text) { showToast("消息不能为空"); return; }
+      try {
+        await Store.editMessage(topic.id, msg.id, text);
+        await loadMessages(topic.id);
+        hideModal();
+        renderChat(topic.id);
+        showToast("消息已更新");
+      } catch (e) {
+        showToast(e.message || "编辑失败");
+      }
+    });
   }
 
   function openRecallModal(topic, msg) {
@@ -1295,7 +1350,12 @@
     }[ai.status] || "待命中";
     const src = ai.model || (ai.config && ai.config.label) || "本地演示模式";
 
-    let summary = statusText;
+    const phaseText = {
+      ANALYZE: "分析需求", CLARIFY: "等待继续讨论", RESEARCH: "检索资料", GENERATE: "生成方案",
+      EVALUATE: "方案比较", RECOMMEND: "等待负责人确认", WAIT_FOR_LEADER: "等待负责人确认",
+      DECOMPOSE: "拆解任务", ASSIGN: "分配任务"
+    }[ai.phase] || "";
+    let summary = (phaseText ? phaseText + " · " : "") + statusText;
     if (ai.status === "voting") summary = "投票中 · " + ai.voters + "/" + ai.totalMembers + " 人已投";
     else if (ai.deepMine) summary = "已生成你的任务分工";
     else if (ai.draft) summary = "已生成方案草稿与 " + Math.max(0, (ai.options || []).length - 1) + " 个方案";
@@ -1463,7 +1523,7 @@
   function openNotifications() {
     if (!isLogged()) { openAuthModal({ mode: "login" }); return; }
     const list = state.notifications || [];
-    const typeLabel = { message: "新消息", mention: "@ 提醒", apply: "入组申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
+    const typeLabel = { message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
     showModal('<h2 class="modal-title">消息提醒</h2><p class="modal-sub">有人发消息、@ 你，或者项目有变化时，会在这里提醒你。</p>' +
       (list.length ? '<ul class="msg-list">' + list.map((n) =>
         '<li class="msg-row bell-row" data-notif="' + n.id + '" data-topic="' + (n.topicId || "") + '">' +
