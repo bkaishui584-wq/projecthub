@@ -1,0 +1,5 @@
+Flask>=3.1,<4
+httpx>=0.28,<1
+python-dotenv>=1.0,<2
+gunicorn>=23,<24
+waitress>=3,<4
