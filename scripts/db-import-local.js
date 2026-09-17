@@ -53,6 +53,7 @@ async function main() {
       merged.users[remoteUser.id] = remoteUser;
     }
     merged.sessions = {};
+    if (remote && remote.security) merged.security = remote.security;
     await store.saveState(merged);
     let filesMigrated = 0;
     if (typeof store.migrateLocalFile === "function") {

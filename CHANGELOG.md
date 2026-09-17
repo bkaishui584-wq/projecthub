@@ -26,7 +26,17 @@
 - Render Blueprint 改为要求独立 PostgreSQL。
 - Docker 构建使用 `package-lock.json` 和 `npm ci`。
 
+### Added
+
+- 消息发送状态、失败重试和离线 outbox；消息 clientId 幂等。
+- 统一通知类型与任务分配提醒。
+- 时间工具模块和跨时区测试。
+- AI 评测样本、模拟 provider 集成测试。
+
 ### Security
+
+- CSRF 改为 HMAC 签名 Token。
+- PostgreSQL 增加共享限流表和跨实例限流。
 
 - 增加 PostgreSQL revision 乐观锁，修复滚动部署时旧实例覆盖新数据的问题。
 

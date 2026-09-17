@@ -1,0 +1,38 @@
+{
+  "draft": [
+    {
+      "name": "valid-cv-project",
+      "input": { "draft": "一、项目定位：开发校园垃圾分类识别系统。二、问题：分类错误率高。三、功能：拍照识别、结果提示、统计记录。四、技术：Python、OpenCV、YOLO。五、分工：算法、前端、调研。六、里程碑：两周完成数据与模型原型。七、风险：样本不足。八、待确认：部署设备。" },
+      "valid": true
+    },
+    {
+      "name": "too-short",
+      "input": { "draft": "做一个系统" },
+      "valid": false
+    }
+  ],
+  "directions": [
+    {
+      "name": "valid-direction",
+      "input": { "directions": [{ "title": "校园垃圾识别 MVP", "desc": "使用 Python、OpenCV 和 YOLO 实现拍照识别，先收集 500 张图片并完成网页演示。", "reason": "范围清晰，两周可交付。" }] },
+      "valid": true
+    },
+    {
+      "name": "missing-desc",
+      "input": { "directions": [{ "title": "空方案", "desc": "", "reason": "" }] },
+      "valid": false
+    }
+  ],
+  "deep": [
+    {
+      "name": "valid-assignment",
+      "input": { "items": [{ "nickname": "张三", "task": "完成数据采集规范并交付 500 条标注样本", "books": ["《动手学深度学习》"], "suggestion": "先建立标注验收标准，再按周同步数据质量。" }] },
+      "valid": true
+    },
+    {
+      "name": "missing-task",
+      "input": { "items": [{ "nickname": "张三", "task": "", "books": [], "suggestion": "" }] },
+      "valid": false
+    }
+  ]
+}

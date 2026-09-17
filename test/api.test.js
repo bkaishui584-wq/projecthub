@@ -192,9 +192,13 @@ test("a project owner cannot recall another member's message", async (t) => {
   const approved = await request(server, owner.session, "/applications/" + application.id + "/approve", { method: "POST", body: {} });
   assert.equal(approved.status, 200, JSON.stringify(approved.body));
 
-  const sent = await request(server, member.session, "/topics/" + topicId + "/messages", { method: "POST", body: { text: "这是成员消息" } });
+  const sent = await request(server, member.session, "/topics/" + topicId + "/messages", { method: "POST", body: { text: "这是成员消息", clientId: "client-message-1" } });
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
   const messageId = sent.body.message.id;
+  const duplicateSend = await request(server, member.session, "/topics/" + topicId + "/messages", { method: "POST", body: { text: "这是成员消息", clientId: "client-message-1" } });
+  assert.equal(duplicateSend.status, 200);
+  assert.equal(duplicateSend.body.duplicated, true);
+  assert.equal(duplicateSend.body.message.id, messageId);
 
   const ownerEdit = await request(server, owner.session, "/topics/" + topicId + "/messages/" + messageId, { method: "PATCH", body: { text: "负责人不能编辑" } });
   assert.equal(ownerEdit.status, 403);
@@ -302,4 +306,16 @@ test("notifications track unread state and member limits are enforced", async (t
   const fullApply = await request(server, member2.session, "/topics/" + topicId + "/applications", { method: "POST", body: { message: "申请二" } });
   assert.equal(fullApply.status, 400);
   assert.match(fullApply.body.error, /满员/);
+});
+
+
+test("request hardening rejects malformed bodies, unsafe paths and disallowed origins", async (t) => {
+  const server = await startServer();
+  t.after(async () => { await server.stop(); fs.rmSync(server.dataDir, { recursive: true, force: true }); });
+  const arrayBody = await request(server, createSession(), "/register", { method: "POST", body: [] });
+  assert.equal(arrayBody.status, 400);
+  const unsafePath = await request(server, null, "/%2e%2e/.env");
+  assert.equal(unsafePath.status, 404);
+  const badOrigin = await request(server, createSession(), "/login", { method: "POST", headers: { Origin: "https://evil.example" }, body: { nickname: "x", password: "StrongPass123!" } });
+  assert.equal(badOrigin.status, 403);
 });
