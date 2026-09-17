@@ -3,7 +3,7 @@ FROM node:20.19-alpine3.20
 WORKDIR /app
 
 # 只复制运行所需文件；.env、data/、logs/ 等敏感内容不进入镜像
-COPY --chown=node:node index.html styles.css script.js server.js ai.js security.js storage.js ./
+COPY --chown=node:node index.html styles.css script.js time-utils.js server.js ai.js security.js storage.js ./
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node privacy.html terms.html package.json package-lock.json README.md ./
 

@@ -15,6 +15,7 @@ class FakePool {
   constructor() {
     this.stateRow = null;
     this.blobs = new Map();
+    this.rateLimits = new Map();
     this.ended = false;
   }
   async query(text, params) {
@@ -43,6 +44,13 @@ class FakePool {
       let bytes = 0;
       for (const value of this.blobs.values()) bytes += value.length;
       return { rows: [{ count: this.blobs.size, bytes: bytes }] };
+    }
+    if (sql.startsWith("INSERT INTO projecthub_rate_limits")) {
+      const key = params[0]; const windowMs = Number(params[1]) || 1; const current = this.rateLimits.get(key);
+      if (!current || current.resetAt <= Date.now()) this.rateLimits.set(key, { count: 1, resetAt: new Date(Date.now() + windowMs) });
+      else current.count += 1;
+      const row = this.rateLimits.get(key);
+      return { rows: [{ count: row.count, reset_at: row.resetAt }] };
     }
     if (sql.startsWith("INSERT INTO projecthub_file_blobs")) {
       this.blobs.set(params[0], Buffer.from(params[1]));
@@ -112,6 +120,8 @@ test("PostgresStore reads and writes state and file blobs through parameterized 
     assert.equal((await store.health()).ok, true);
     const stats = await store.stats();
     assert.equal(stats.fileCount, 0);
+    assert.equal((await store.consumeRateLimit("test", 1, 1000)).allowed, true);
+    assert.equal((await store.consumeRateLimit("test", 1, 1000)).allowed, false);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

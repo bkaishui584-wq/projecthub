@@ -42,11 +42,11 @@
 
   const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const formatSize = (n) => (n < 1024 ? n + " B" : (n < 1024 * 1024 ? (n / 1024).toFixed(1) + " KB" : (n / 1024 / 1024).toFixed(1) + " MB"));
-  const formatDate = (ts) => { try { return new Date(ts).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
-  const formatTime = (ts) => { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
+  const { formatDate, formatTime } = window.ProjectHubTime || { formatDate: function () { return ""; }, formatTime: function () { return ""; } };
 
   /* ================= 状态与本地存储 ================= */
   const USER_KEY = "projecthub_session_v3";
+  const OUTBOX_KEY = "projecthub_outbox_v1";
   let state = {
     user: null,
     token: "",
@@ -58,6 +58,7 @@
     ai: {},
     notifications: [],
     unread: 0,
+    outbox: [],
     replyTo: null,
     filter: "all",
     search: "",
@@ -66,6 +67,7 @@
   let currentTopicId = null;
 
   function loadSession() {
+    state.outbox = loadOutbox();
     try {
       const raw = localStorage.getItem(USER_KEY);
       if (!raw) return;
@@ -73,6 +75,13 @@
       state.user = parsed.user || null;      // 仅缓存用户资料；会话凭据在 HttpOnly Cookie 中，JS 读不到
       state.token = "";                      // 兼容旧数据：不再使用 localStorage 中的 Token
     } catch (e) {}
+  }
+  function loadOutbox() {
+    try { const parsed = JSON.parse(localStorage.getItem(OUTBOX_KEY) || "[]"); return Array.isArray(parsed) ? parsed : []; }
+    catch (e) { return []; }
+  }
+  function saveOutbox() {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(state.outbox || [])); } catch (e) {}
   }
   function saveSession() {
     try { localStorage.setItem(USER_KEY, JSON.stringify({ user: state.user })); } catch (e) {}
@@ -82,8 +91,8 @@
     return m ? decodeURIComponent(m[1]) : "";
   }
   function clearSession() {
-    state.user = null; state.token = ""; state.inbox = []; state.myApplications = [];
-    try { localStorage.removeItem(USER_KEY); } catch (e) {}
+    state.user = null; state.token = ""; state.inbox = []; state.myApplications = []; state.outbox = [];
+    try { localStorage.removeItem(USER_KEY); localStorage.removeItem(OUTBOX_KEY); } catch (e) {}
   }
 
   /* ================= DOM / 弹窗 ================= */
@@ -166,7 +175,7 @@
     myApplications: () => api("GET", "api/my-applications"),
     decide: (id, action) => api("POST", "api/applications/" + encodeURIComponent(id) + "/" + action, {}),
     messages: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/messages?limit=300"),
-    sendMessage: (id, text, replyTo) => api("POST", "api/topics/" + encodeURIComponent(id) + "/messages", { text: text, replyTo: replyTo || null }),
+    sendMessage: (id, text, replyTo, clientId) => api("POST", "api/topics/" + encodeURIComponent(id) + "/messages", { text: text, replyTo: replyTo || null, clientId: clientId || "" }),
     files: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/files"),
     uploadFile: (id, payload) => api("POST", "api/topics/" + encodeURIComponent(id) + "/files", payload),
     setTag: (id, memberId, tag) => api("POST", "api/topics/" + encodeURIComponent(id) + "/members/" + encodeURIComponent(memberId) + "/tag", { tag: tag }),
@@ -384,6 +393,7 @@
     try { const r = await Store.myApplications(); state.myApplications = r.applications || []; } catch (e) {}
     try { const r = await Store.inbox(); state.inbox = r.applications || []; } catch (e) {}
     await loadNotifications();
+    await flushOutbox();
   }
 
   /* ================= 身份选择 ================= */
@@ -922,6 +932,7 @@
     }
 
     const canRecall = mine;
+    const statusHtml = mine && m.pending ? '<span class="msg-status">发送中…</span>' : (mine && m.failed ? '<span class="msg-status is-failed">发送失败 <button type="button" data-act="retry" data-id="' + m.id + '">重试</button></span>' : "");
     div.className = "msg" + (mine ? " mine" : "");
     div.innerHTML =
       '<div class="msg-author">' + escapeHtml(name) +
@@ -929,7 +940,7 @@
         (role ? '<span class="role">' + role + '</span>' : "") + '</div>' +
       (m.replyTo ? '<div class="msg-quote">引用 ' + escapeHtml(m.replyTo.authorName || "") + '：' + escapeHtml(m.replyTo.text || "") + '</div>' : "") +
       '<div class="bubble">' + highlightMentions(m.text, topic) + '</div>' +
-      '<div class="msg-time">' + escapeHtml(timeText) + (m.edited ? " · 已编辑" : "") + '</div>' +
+      '<div class="msg-time">' + escapeHtml(timeText) + (m.edited ? " · 已编辑" : "") + statusHtml + '</div>' +
       '<div class="msg-actions">' +
         '<button type="button" data-act="quote" data-id="' + m.id + '">引用</button>' +
         '<button type="button" data-act="copy" data-id="' + m.id + '">复制</button>' +
@@ -950,6 +961,8 @@
     } else if (act === "copy") {
       try { await navigator.clipboard.writeText(msg.text || ""); showToast("已复制这条消息"); }
       catch (e) { showToast("复制失败，请手动选择文字复制"); }
+    } else if (act === "retry") {
+      retryMessage(topic, msg);
     } else if (act === "edit") {
       openEditMessageModal(topic, msg);
     } else if (act === "recall") {
@@ -1175,6 +1188,50 @@
     });
   }
 
+  function makeClientId() {
+    try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+    return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+  }
+  function removeOutbox(clientId) {
+    state.outbox = (state.outbox || []).filter((x) => x.clientId !== clientId);
+    saveOutbox();
+  }
+  function queueOutbox(item) {
+    if (!state.outbox) state.outbox = [];
+    if (!state.outbox.some((x) => x.clientId === item.clientId)) state.outbox.push(item);
+    saveOutbox();
+  }
+  async function deliverMessage(item) {
+    const list = state.messages[item.topicId] = state.messages[item.topicId] || [];
+    let local = list.find((m) => m.clientId === item.clientId || m.id === "local-" + item.clientId);
+    if (!local) {
+      local = { id: "local-" + item.clientId, clientId: item.clientId, author: state.user && state.user.id, authorName: state.user && state.user.nickname, text: item.text, replyTo: item.replyTo || null, mentions: [], recalled: false, at: item.at || Date.now(), pending: true, failed: false };
+      list.push(local);
+    }
+    local.pending = true; local.failed = false;
+    if (currentTopicId === item.topicId) renderChat(item.topicId);
+    try {
+      const r = await Store.sendMessage(item.topicId, item.text, item.replyTo, item.clientId);
+      const index = list.findIndex((m) => m.clientId === item.clientId || m.id === "local-" + item.clientId);
+      if (r.message) { if (index >= 0) list[index] = r.message; else list.push(r.message); }
+      removeOutbox(item.clientId);
+      if (currentTopicId === item.topicId) renderChat(item.topicId);
+      return true;
+    } catch (e) {
+      local.pending = false; local.failed = true;
+      queueOutbox(item);
+      if (currentTopicId === item.topicId) renderChat(item.topicId);
+      showToast(e.message || "发送失败，已加入重试队列");
+      return false;
+    }
+  }
+  async function flushOutbox() {
+    if (!isLogged() || navigator.onLine === false) return;
+    for (const item of (state.outbox || []).slice()) await deliverMessage(item);
+  }
+  async function retryMessage(topic, msg) {
+    await deliverMessage({ topicId: topic.id, text: msg.text, replyTo: msg.replyTo || null, clientId: msg.clientId || makeClientId(), at: msg.at || Date.now() });
+  }
   async function sendMessage(e) {
     e.preventDefault();
     if (!currentTopicId || !isLogged()) return;
@@ -1185,17 +1242,7 @@
     const reply = state.replyTo;
     state.replyTo = null;
     renderReplyBar();
-    try {
-      const r = await Store.sendMessage(currentTopicId, text, reply);
-      const list = state.messages[currentTopicId] = state.messages[currentTopicId] || [];
-      if (r.message && !list.some((m) => m.id === r.message.id)) list.push(r.message);
-      renderChat(currentTopicId);
-    } catch (e) {
-      input.value = text;
-      state.replyTo = reply;
-      renderReplyBar();
-      showToast(e.message || "发送失败");
-    }
+    await deliverMessage({ topicId: currentTopicId, text: text, replyTo: reply, clientId: makeClientId(), at: Date.now() });
   }
 
   function handleFilePick(ev) {
@@ -1523,7 +1570,7 @@
   function openNotifications() {
     if (!isLogged()) { openAuthModal({ mode: "login" }); return; }
     const list = state.notifications || [];
-    const typeLabel = { message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
+    const typeLabel = { NEW_MESSAGE: "新消息", MENTION: "@ 提醒", PROJECT_APPLICATION: "入组申请", APPLICATION_CANCELLED: "取消申请", APPLICATION_ACCEPTED: "申请通过", APPLICATION_REJECTED: "申请结果", MEMBER_REMOVED: "移出项目", FILE_UPLOADED: "新文件", PROJECT_UPDATE: "项目公告", TASK_ASSIGNMENT: "任务分配", REPORT_CREATED: "举报", SYSTEM_NOTIFICATION: "系统通知", message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
     showModal('<h2 class="modal-title">消息提醒</h2><p class="modal-sub">有人发消息、@ 你，或者项目有变化时，会在这里提醒你。</p>' +
       (list.length ? '<ul class="msg-list">' + list.map((n) =>
         '<li class="msg-row bell-row" data-notif="' + n.id + '" data-topic="' + (n.topicId || "") + '">' +
@@ -1566,6 +1613,7 @@
     $("#btn-inbox").addEventListener("click", openInboxModal);
     const bell = $("#btn-bell");
     if (bell) bell.addEventListener("click", openNotifications);
+    window.addEventListener("online", () => { flushOutbox(); });
     const reportBtn = $("#btn-report");
     if (reportBtn) reportBtn.addEventListener("click", () => {
       const t = state.topics.find((x) => x.id === currentTopicId);

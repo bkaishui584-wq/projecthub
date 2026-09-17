@@ -230,7 +230,8 @@ function cleanAiText(value, max, keepNewlines) {
 }
 
 function validateDraft(value) {
-  const draft = value && cleanAiText(value.draft, 12000, true);
+  if (!value || typeof value !== "object") return null;
+  const draft = cleanAiText(value.draft, 12000, true);
   return draft.length >= 80 ? { draft: draft } : null;
 }
 
@@ -474,4 +475,7 @@ async function generateDeepPlan(topic, messages, draft) {
   return { items: fallbackDeepPlan(topic), source: "local", model: "本地演示模式" };
 }
 
-module.exports = { PROMPT_VERSION, publicConfig: publicConfig, isConfigured: isConfigured, resolveConfig: resolveConfig, generateDraft: generateDraft, generateDirections: generateDirections, generateDeepPlan: generateDeepPlan };
+function __setActiveConfigForTest(config) { activeConfig = Object.assign({}, config); detectDone = true; }
+function __resetConfigForTest() { activeConfig = ENV_CONFIG; detectDone = false; }
+
+module.exports = { PROMPT_VERSION, publicConfig: publicConfig, isConfigured: isConfigured, resolveConfig: resolveConfig, generateDraft: generateDraft, generateDirections: generateDirections, generateDeepPlan: generateDeepPlan, validateDraft: validateDraft, validateDirections: validateDirections, validateDeepItems: validateDeepItems, fallbackDraft: fallbackDraft, fallbackDirections: fallbackDirections, fallbackDeepPlan: fallbackDeepPlan, __setActiveConfigForTest: __setActiveConfigForTest, __resetConfigForTest: __resetConfigForTest };

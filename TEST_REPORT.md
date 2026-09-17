@@ -18,7 +18,7 @@ git diff --check
 ## 结果
 
 - 语法检查：通过。
-- 自动化测试：12 项全部通过。
+- 自动化测试：17 项全部通过。
 - npm audit：0 个已知漏洞。
 - git diff --check：通过（仅有 Windows 换行提示，没有空白错误）。
 
@@ -27,6 +27,10 @@ git diff --check
 - JSON 文件持久化、备份、恢复读取和文件键防穿越。
 - PostgreSQL 状态和文件 Blob 的参数化读写（mock pool）。
 - PostgreSQL 乐观锁：旧实例使用过期 revision 写入时被拒绝，不能覆盖新实例数据。
+- 签名 CSRF Token 拒绝伪造请求。
+- 消息 clientId 幂等，重复提交不会重复创建消息。
+- AI 评测样本、结构校验、有限重试和模拟 OpenAI-compatible provider。
+- 时间工具在 UTC 与 Asia/Shanghai 下格式一致。
 - 空数据库首次导入旧 JSON。
 - 生产环境拒绝隐式文件存储。
 - 公开话题不泄露完整 AI 对象。

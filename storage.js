@@ -180,6 +180,13 @@ class PostgresStore {
     `);
     await this.pool.query(`ALTER TABLE projecthub_state ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 0`);
     await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS projecthub_rate_limits (
+        key text PRIMARY KEY,
+        count integer NOT NULL,
+        reset_at timestamptz NOT NULL
+      )
+    `);
+    await this.pool.query(`
       CREATE TABLE IF NOT EXISTS projecthub_file_blobs (
         key text PRIMARY KEY,
         content bytea NOT NULL,
@@ -246,6 +253,22 @@ class PostgresStore {
       throw new StorageConflictError();
     }
     this.revision = Number(updated.rows[0].revision);
+  }
+
+  async consumeRateLimit(key, limit, windowMs) {
+    const result = await this.pool.query(
+      `INSERT INTO projecthub_rate_limits (key, count, reset_at)
+       VALUES ($1, 1, now() + ($2 * interval '1 millisecond'))
+       ON CONFLICT (key) DO UPDATE
+       SET count = CASE WHEN projecthub_rate_limits.reset_at <= now() THEN 1 ELSE projecthub_rate_limits.count + 1 END,
+           reset_at = CASE WHEN projecthub_rate_limits.reset_at <= now() THEN now() + ($2 * interval '1 millisecond') ELSE projecthub_rate_limits.reset_at END
+       RETURNING count, reset_at`,
+      [String(key), Math.max(1, Number(windowMs) || 1)]
+    );
+    const row = result.rows && result.rows[0] ? result.rows[0] : { count: 1, reset_at: new Date(Date.now() + windowMs) };
+    const count = Number(row.count) || 1;
+    const resetAt = row.reset_at instanceof Date ? row.reset_at.getTime() : new Date(row.reset_at).getTime();
+    return { allowed: count <= limit, remaining: Math.max(0, limit - count), retryAfter: Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)) };
   }
 
   async saveFile(key, buffer) {

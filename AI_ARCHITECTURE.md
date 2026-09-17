@@ -36,6 +36,11 @@ ANALYZE
 - AI 调用受项目、单用户和全站每日上限约束。
 - AI 调用受全局并发、超时和异常审计约束。
 
+## 测试与评测
+
+- `test/fixtures/ai-evals.json` 保存结构校验样本。
+- `test/ai.test.js` 使用模拟 OpenAI-compatible provider 验证正常输出、非法输出重试和本地回退。
+
 ## 后续工作
 
 - 在真实模型供应商上建立评测集。
