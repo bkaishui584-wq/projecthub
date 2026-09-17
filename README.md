@@ -176,7 +176,8 @@ npm run db:migrate
 npm run db:check
 ```
 
-`db:migrate` 会把本机 `data/store.json` 和 `data/files/` 导入空数据库；数据库已经有数据时不会覆盖，只会补齐缺失的上传文件。
+`db:migrate` 会把本机 `data/store.json` 和 `data/files/` 导入空数据库。
+如果数据库已经由新版本服务初始化过，但仍只有管理员、没有项目数据，可执行 `npm run db:import-local` 安全导入本地数据；该命令发现远程已有项目、消息或申请时会拒绝覆盖。
 
 生产环境必须使用独立 PostgreSQL。首次启动且数据库为空时，服务会把现有
 `data/store.json` 导入 `projecthub_state`，并把 `data/files/` 中已有的上传文件
