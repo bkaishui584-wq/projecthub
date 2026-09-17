@@ -5,9 +5,15 @@
   "description": "ProjectHub —— 面向大学生的线上项目协作社区",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js",
+    "db:check": "node scripts/db-check.js",
+    "db:migrate": "node scripts/db-migrate.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

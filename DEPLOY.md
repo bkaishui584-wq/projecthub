@@ -1,58 +1,100 @@
 # ProjectHub 永久部署指南
 
-> 临时链接（trycloudflare）只在你电脑开机时有效。想要**永久固定网址**，需要把项目部署到云端。
-> 本项目是标准 Node.js 应用（零第三方依赖），以下三种方式都可以。
+> 临时链接（trycloudflare）只在你电脑开机时有效。想要永久固定网址，需要把项目部署到云端。
 
 ---
 
-## 方式一：Render（最快、免费、网址永久）
+## 生产部署前提
 
-**特点**：免费实例网址永久固定；闲置 15 分钟后休眠，下次访问需等待约 30 秒；**data/ 是临时的**，重新部署会清空数据。
+- Node.js 18 以上。
+- 独立 PostgreSQL 数据库。
+- `ADMIN_PASSWORD` 通过平台 Secret 设置。
+- 不要把 `.env`、API Key、Token 或管理员密码提交到 Git。
 
-1. 注册 https://render.com （用邮箱或 GitHub 登录）
-2. 把本项目上传到自己的 GitHub 仓库（新建仓库 → 上传 projecthub-site 目录下的全部文件）
-3. Render 控制台 → New → Blueprint → 选择该仓库（会自动读取项目里的 render.yaml）
-4. 部署时按提示填写环境变量：ADMIN_PASSWORD 必填（填一个足够长的随机密码，这是管理员登录密码），其余已在 render.yaml 中预设
-5. 等待 2–3 分钟，Render 会分配永久网址：https://<你的服务名>.onrender.com
-6. 想保留数据：升级为付费实例并在服务设置里挂载磁盘到 /app/data
+生产环境如果只有 Render 临时文件系统而没有 `DATABASE_URL`，服务会拒绝启动，这是为了避免重新部署时静默丢失全部数据。
 
 ---
 
-## 方式二：Zeabur / Railway（亚洲访问快、数据可持久、少量费用）
+## 方式一：Render（推荐）
 
-**特点**：支持 Docker 部署；可挂载持久卷，**数据不会丢**；国内访问速度较好。
+1. 注册 https://render.com 并登录。
+2. 把项目上传到 GitHub/Gitee 仓库。
+3. Render 控制台 → New → Blueprint → 选择该仓库。
+4. 创建或关联独立 PostgreSQL，复制连接串到 `DATABASE_URL`。
+5. 在本地先执行旧数据迁移（需要从本机包含旧 `data/` 的目录运行）：
 
-1. 注册 https://zeabur.com 或 https://railway.com
-2. 新建项目 → 从 Git 仓库部署（平台会自动识别项目根目录的 Dockerfile）
-3. 添加持久卷（Volume），挂载路径填 /app/data（保证账号与聊天记录不丢）
-4. 在平台的环境变量里设置：NODE_ENV=production、TRUST_PROXY=1、ADMIN_PASSWORD=<你的强密码>
-5. 部署完成后在平台里绑定域名，即可得到永久网址
+```powershell
+$env:NODE_ENV="production"
+$env:STORAGE_DRIVER="auto"
+$env:DATABASE_URL="postgresql://..."
+$env:DATABASE_SSL="require"
+npm run db:migrate
+npm run db:check
+```
+6. 设置 `ADMIN_PASSWORD` 为新的强随机密码。
+7. 部署完成后访问 `/api/health`，确认健康检查通过。
+8. 创建测试用户、项目、消息和文件，然后重新部署一次，确认数据仍然存在。
 
----
-
-## 方式三：国内云服务器 + Docker（最稳、国内访问最快）
-
-**特点**：完全自主可控、数据持久、无冷启动；学生机通常每月十几元。
-
-1. 购买一台云服务器（阿里云/腾讯云/华为云学生机即可，1核2G 足够）
-2. 安装 Docker 与 Docker Compose
-3. 把项目上传到服务器并进入项目目录
-4. 在服务器上创建 .env 文件（不要提交到 Git），写入：NODE_ENV=production、TRUST_PROXY=1、ADMIN_PASSWORD=<你的强密码>
-5. 执行：docker compose up -d --build
-6. 用 Caddy 反向代理并自动签发 HTTPS 证书（配置：your-domain.com { reverse_proxy 127.0.0.1:8787 }）
-7. 完成后的 https://your-domain.com 就是永久网址（需要一个域名，几十元/年）
+不要用 Web Service 的临时磁盘代替数据库。`render.yaml` 已要求 `DATABASE_URL`。
 
 ---
 
-## 部署后必做三件事
+## 方式二：Zeabur / Railway
 
-1. **设置强管理员密码**：通过环境变量 ADMIN_PASSWORD 提供；代码中没有任何默认密码
-2. **确认 HTTPS**：云平台一般默认提供；自建服务器请用 Caddy/Nginx 配证书（项目会自动下发 HSTS）
-3. **确认数据目录持久化**：把卷挂到 /app/data，否则重新部署会清空账号与聊天记录
+1. 创建项目并从 Git 仓库部署。
+2. 添加 PostgreSQL，平台会提供 `DATABASE_URL`。
+3. 设置环境变量：
+   - `NODE_ENV=production`
+   - `TRUST_PROXY=1`
+   - `STORAGE_DRIVER=auto`
+   - `DATABASE_URL=<平台提供的连接串>`
+   - `DATABASE_SSL=require`（按平台要求调整）
+   - `ADMIN_PASSWORD=<新的强随机密码>`
+4. 部署后执行健康检查和重启持久化测试。
+
+---
+
+## 方式三：国内云服务器 + Docker
+
+1. 准备云服务器，安装 Docker 与 Docker Compose。
+2. 准备 PostgreSQL，创建 `projecthub` 数据库和独立应用账号。
+3. 在服务器创建 `.env`，设置数据库连接和管理员 Secret，不要提交到 Git。
+4. 执行：
+
+```bash
+docker compose up -d --build
+```
+
+5. 用 Caddy/Nginx 反向代理并配置 HTTPS。
+6. 验证数据库连接、备份和恢复流程。
+
+---
+
+## 部署后检查
+
+1. `/api/health` 返回 200。
+2. 管理员用轮换后的新密码登录。
+3. 旧密码不能登录。
+4. 创建用户、项目、消息、申请和文件。
+5. 重启或重新部署 Web Service。
+6. 验证上述数据全部还在。
+7. 验证普通用户无法访问管理员 API。
+8. 验证消息作者以外的人不能撤回消息。
+
+## 环境变量重点
+
+| 变量 | 作用 |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL 连接串，生产必填 |
+| `DATABASE_SSL` | `require` / `verify-full` / `disable` |
+| `STORAGE_DRIVER` | `auto`、`postgres` 或仅开发使用的 `file` |
+| `ADMIN_PASSWORD` | 首次初始化或显式轮换管理员密码 |
+| `ALLOWED_ORIGINS` | 跨域白名单，同源部署留空 |
+| `AI_DAILY_USER` / `AI_DAILY_GLOBAL` | AI 预算保护 |
 
 ## 常见问题
 
-- 为什么不能直接用现在的临时链接？它依赖你本机运行，关机即失效。
-- 免费方案数据会丢吗？Render 免费实例会；Zeabur/Railway 挂载卷后不会；自建服务器不会。
-- 需要改代码吗？不需要，项目已包含 Dockerfile、render.yaml、package.json，可直接部署。
-- AI 功能需要额外配置吗？不配置也能用（内置本地演示模式）；要接真实模型就在平台环境变量加 DEEPSEEK_API_KEY 或 LLM_BASE_URL/LLM_API_KEY/LLM_MODEL。
+- 免费方案数据会丢吗？如果使用平台临时磁盘会丢；正确配置 PostgreSQL 后不会。
+- 重启后为什么服务拒绝启动？生产环境未配置 `DATABASE_URL`，这是防止静默数据丢失的保护。
+- AI 需要额外配置吗？不配置可使用本地演示模式；需要真实模型时配置 DeepSeek 或 OpenAI-compatible endpoint。
+- 上传文件在哪？PostgreSQL 模式下保存在 `projecthub_file_blobs`，不会只依赖临时文件系统。

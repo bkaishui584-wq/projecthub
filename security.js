@@ -28,6 +28,7 @@ const LIMITS = {
   maxFileBytes: intEnv("MAX_FILE_BYTES", 5 * 1024 * 1024, 1024, 20 * 1024 * 1024),
   maxFilesPerTopic: intEnv("MAX_FILES_PER_TOPIC", 200, 1, 5000),
   maxStoragePerUser: intEnv("MAX_STORAGE_PER_USER", 50 * 1024 * 1024, 1024, 1024 * 1024 * 1024),
+  maxStorageGlobal: intEnv("MAX_STORAGE_GLOBAL", 1024 * 1024 * 1024, 1024 * 1024, 20 * 1024 * 1024 * 1024),
   /* 并发 */
   maxInflightGlobal: intEnv("MAX_INFLIGHT_GLOBAL", 200, 10, 5000),
   maxInflightPerIp: intEnv("MAX_INFLIGHT_PER_IP", 20, 1, 1000),
@@ -50,6 +51,12 @@ const LIMITS = {
   uploadWindowMs: intEnv("RATE_UPLOAD_WINDOW_MS", 10 * 60 * 1000, 10000, 24 * 3600000),
   aiPerTopic: intEnv("RATE_AI_TOPIC", 10, 1, 1000),
   aiWindowMs: intEnv("RATE_AI_WINDOW_MS", 60 * 60 * 1000, 10000, 24 * 3600000),
+  applicationPerUser: intEnv("RATE_APPLICATION_USER", 10, 1, 1000),
+  applicationWindowMs: intEnv("RATE_APPLICATION_WINDOW_MS", 60 * 60 * 1000, 10000, 24 * 3600000),
+  applicationReapplyCooldownMs: intEnv("APPLICATION_REAPPLY_COOLDOWN_MS", 24 * 3600 * 1000, 0, 30 * 24 * 3600 * 1000),
+  aiPerUser: intEnv("AI_DAILY_USER", 30, 1, 10000),
+  aiPerGlobal: intEnv("AI_DAILY_GLOBAL", 500, 1, 100000),
+  aiDailyWindowMs: 24 * 3600 * 1000,
   /* AI 并发 */
   maxAiConcurrent: intEnv("MAX_AI_CONCURRENT", 2, 1, 50),
   trustProxy: process.env.TRUST_PROXY === "1"
@@ -151,7 +158,7 @@ function readJsonBody(req, opts) {
       } catch (e) {
         return finish({ ok: false, status: 400, error: "请求体不是合法 JSON" });
       }
-      if (data === null || typeof data !== "object") return finish({ ok: false, status: 400, error: "请求体必须是 JSON 对象" });
+      if (data === null || typeof data !== "object" || Array.isArray(data)) return finish({ ok: false, status: 400, error: "请求体必须是 JSON 对象" });
       const shapeErr = validateShape(data, opts, 1, "root", new Set());
       if (shapeErr) return finish({ ok: false, status: 400, error: shapeErr });
       finish({ ok: true, data });

@@ -1,5 +1,5 @@
 /* ProjectHub 多人协作服务器
- * 零依赖：只用 Node 内置模块。提供静态页面 + 账号系统 + 共享数据 API + SSE 实时同步。
+ * 除 PostgreSQL 驱动 pg 外，仅使用 Node 内置模块。提供静态页面 + 账号系统 + 共享数据 API + SSE 实时同步。
  * 启动：node server.js   默认端口 8787（可用环境变量 PORT 覆盖）
  */
 "use strict";
@@ -33,14 +33,14 @@ const path = require("path");
 const crypto = require("crypto");
 const AI = require("./ai");
 const SEC = require("./security");
+const STORAGE = require("./storage");
 
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, "data");
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, "data");
 const FILES_DIR = path.join(DATA_DIR, "files");
+const LOG_DIR = process.env.LOG_DIR ? path.resolve(process.env.LOG_DIR) : path.join(ROOT, "logs");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
 const PORT = process.env.PORT || 8787;
-const MAX_BODY = 12 * 1024 * 1024;     // 约 12MB，够上传 5MB 文件（base64 会膨胀）
-const MAX_FILE = 5 * 1024 * 1024;
 const ALLOWED_FILE_EXT = [".doc", ".docx", ".jpg", ".jpeg", ".png"];
 const EXT_FAMILY = { ".jpg": "jpg", ".jpeg": "jpg", ".png": "png", ".docx": "zip", ".doc": "ole" };
 /* 通过 Magic Number 判断真实文件类型，防止改扩展名伪装 */
@@ -87,10 +87,31 @@ const MIME = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 };
 
-let db = loadDb();
+function emptyDb() {
+  return { users: {}, sessions: {}, topics: [], messages: {}, applications: [], files: {}, notifications: {}, reports: [] };
+}
+
+function normalizeDb(parsed) {
+  const base = emptyDb();
+  const src = parsed && typeof parsed === "object" ? parsed : {};
+  return {
+    users: src.users || base.users,
+    sessions: src.sessions || base.sessions,
+    topics: Array.isArray(src.topics) ? src.topics : base.topics,
+    messages: src.messages || base.messages,
+    applications: Array.isArray(src.applications) ? src.applications : base.applications,
+    files: src.files || base.files,
+    notifications: src.notifications || base.notifications,
+    reports: Array.isArray(src.reports) ? src.reports : base.reports
+  };
+}
+
+let db = emptyDb();
+let storage = null;
+let storageReady = false;
 
 /* ---- 基础安全边界实例 ---- */
-const audit = SEC.createAudit(path.join(ROOT, "logs", "audit.log"));
+const audit = SEC.createAudit(path.join(LOG_DIR, "audit.log"));
 const rateLimiter = new SEC.RateLimiter();
 const inflight = new SEC.Inflight(SEC.LIMITS.maxInflightGlobal, SEC.LIMITS.maxInflightPerIp);
 const aiInflight = new SEC.Inflight(SEC.LIMITS.maxAiConcurrent, 1);
@@ -98,75 +119,48 @@ const sseHub = new SEC.SseHub(SEC.LIMITS.maxSseTotal, SEC.LIMITS.maxSsePerIp);
 const sseTickets = new Map();          // ticket -> { userId, expiresAt }
 const loginFailures = new Map();       // 账号维度失败计数 -> { count, until }
 
-function emptyDb() {
-  return { users: {}, sessions: {}, topics: [], messages: {}, applications: [], files: {}, notifications: {}, reports: [] };
+let saveTimer = null;
+let saveChain = Promise.resolve();
+let lastSaveError = null;
+
+function snapshotDb() {
+  return JSON.parse(JSON.stringify(db));
 }
 
-function loadDb() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    const base = emptyDb();
-    return {
-      users: parsed.users || base.users,
-      sessions: parsed.sessions || base.sessions,
-      topics: Array.isArray(parsed.topics) ? parsed.topics : base.topics,
-      messages: parsed.messages || base.messages,
-      applications: Array.isArray(parsed.applications) ? parsed.applications : base.applications,
-      files: parsed.files || base.files,
-      notifications: parsed.notifications || base.notifications,
-      reports: Array.isArray(parsed.reports) ? parsed.reports : base.reports
-    };
-  } catch (e) {
-    if (e && e.code === "ENOENT") return emptyDb();          // 首次运行：还没有数据文件
-    /* 数据文件损坏：保留现场并明确失败，绝不静默清空 */
-    const keep = DATA_FILE + ".corrupt-" + Date.now();
-    try { fs.renameSync(DATA_FILE, keep); } catch (e2) {}
-    console.error("[FATAL] 数据文件无法解析，已保留为：" + keep);
-    console.error("        原因：" + (e && e.message));
-    console.error("        确认无误后可删除该文件重新初始化，或从备份恢复。");
-    process.exit(1);
-  }
+function enqueueSave() {
+  if (!storageReady || !storage) return Promise.reject(new Error("持久化存储尚未初始化"));
+  const snapshot = snapshotDb();
+  const operation = saveChain.then(async () => {
+    await storage.saveState(snapshot);
+    lastSaveError = null;
+  });
+  const settled = operation.catch((e) => {
+    lastSaveError = e;
+    console.error("[STORAGE] 保存失败：" + (e && e.message));
+  });
+  saveChain = settled;
+  return operation;
 }
 
 function saveDb() {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(DATA_FILE)) {
-      try { fs.copyFileSync(DATA_FILE, DATA_FILE + ".bak"); } catch (e) {}   // 上一次版本
-    }
-    const tmp = DATA_FILE + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf8");
-    fs.renameSync(tmp, DATA_FILE);                                            // 原子替换
-    snapshotDaily();
-  } catch (e) {
-    console.error("保存数据失败：", e.message);
-  }
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  return enqueueSave();
 }
 
-/* 每天保留一份快照（最多 7 份），便于误删/损坏后恢复 */
-let lastSnapshotDay = "";
-function snapshotDaily() {
-  try {
-    const day = new Date().toISOString().slice(0, 10);
-    if (day === lastSnapshotDay) return;
-    lastSnapshotDay = day;
-    const dir = path.join(DATA_DIR, "backups");
-    fs.mkdirSync(dir, { recursive: true });
-    fs.copyFileSync(DATA_FILE, path.join(dir, "store-" + day + ".json"));
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
-    while (files.length > 7) {
-      const old = files.shift();
-      try { fs.unlinkSync(path.join(dir, old)); } catch (e) {}
-    }
-  } catch (e) {}
-}
-
-/* 高频写入合并：300ms 内的多次变更只落盘一次，降低写放大 */
-let saveTimer = null;
+/* 高频写入合并：300ms 内的多次变更合并为一次持久化。 */
 function scheduleSave() {
   if (saveTimer) return;
-  saveTimer = setTimeout(() => { saveTimer = null; saveDb(); }, 300);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    enqueueSave().catch(() => {});
+  }, 300);
   if (saveTimer.unref) saveTimer.unref();
+}
+
+async function flushDb() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; enqueueSave().catch(() => {}); }
+  await saveChain;
+  if (lastSaveError) throw lastSaveError;
 }
 
 /* ---------- 密码与登录 ---------- */
@@ -201,13 +195,31 @@ function verifyTopicPassword(topic, plain) {
   }
   if (typeof topic.password === "string" && topic.password) {
     const ok = safeEqualStr(plain, topic.password);
-    if (ok) { setTopicPassword(topic, plain); saveDb(); }   // 惰性升级为哈希
+    if (ok) { setTopicPassword(topic, plain); scheduleSave(); }   // 惰性升级为哈希
     return ok;
   }
   return false;
 }
 /* 启动时一次性迁移：把历史明文密码改为哈希（密码本身不变，用户无感） */
-function migrateTopicPasswords() {
+async function migrateSessionTokens() {
+  let changed = false;
+  const next = {};
+  Object.keys(db.sessions).forEach((key) => {
+    const session = db.sessions[key];
+    if (!session || typeof session !== "object") return;
+    if (session.hashed) {
+      next[key] = session;
+    } else {
+      next[sessionKey(key)] = Object.assign({}, session, { hashed: true });
+      changed = true;
+    }
+  });
+  db.sessions = next;
+  if (changed) await saveDb();
+  return changed;
+}
+
+async function migrateTopicPasswords() {
   let count = 0;
   db.topics.forEach((t) => {
     if (typeof t.password === "string" && t.password && !t.passwordHash) {
@@ -216,16 +228,18 @@ function migrateTopicPasswords() {
     }
   });
   if (count > 0) {
-    saveDb();
+    await saveDb();
     audit.log("topic_password_migrated", { detail: String(count), result: "ok" });
   }
   return count;
 }
 
+function sessionKey(token) { return crypto.createHash("sha256").update(String(token)).digest("hex"); }
+
 function createSession(userId) {
   const token = crypto.randomBytes(24).toString("hex");
   const now = Date.now();
-  db.sessions[token] = { userId: userId, createdAt: now, lastSeenAt: now, expiresAt: now + SESSION_TTL_MS };
+  db.sessions[sessionKey(token)] = { userId: userId, createdAt: now, lastSeenAt: now, expiresAt: now + SESSION_TTL_MS, hashed: true };
   const mine = Object.keys(db.sessions).filter((t) => db.sessions[t].userId === userId);
   if (mine.length > MAX_SESSIONS_PER_USER) {
     mine.sort((a, b) => (db.sessions[a].createdAt || 0) - (db.sessions[b].createdAt || 0));
@@ -235,9 +249,10 @@ function createSession(userId) {
 }
 function userByToken(token) {
   if (!token) return null;
-  const sess = db.sessions[token];
+  const key = sessionKey(token);
+  const sess = db.sessions[key];
   if (!sess) return null;
-  if (sess.expiresAt && Date.now() > sess.expiresAt) { delete db.sessions[token]; return null; }
+  if (sess.expiresAt && Date.now() > sess.expiresAt) { delete db.sessions[key]; return null; }
   sess.lastSeenAt = Date.now();
   return db.users[sess.userId] || null;
 }
@@ -329,7 +344,7 @@ function findUserByNickname(nickname) {
  * - 已存在管理员时：启动过程绝不修改其密码/角色/封禁状态；
  * - 需要更换密码时，显式执行 node server.js --rotate-admin-password（一次性轮换并让旧会话失效）。
  */
-function ensureAdmin(options) {
+async function ensureAdmin(options) {
   const rotate = !!(options && options.rotate);
   const admin = findUserByNickname(ADMIN_NICKNAME);
   if (!admin) {
@@ -340,7 +355,7 @@ function ensureAdmin(options) {
     }
     const created = createUser(ADMIN_NICKNAME, ADMIN_PASSWORD, "管理员", "admin");
     audit.log("admin_created", { target: ADMIN_NICKNAME, result: "ok" });
-    saveDb();
+    await saveDb();
     return created;
   }
   if (rotate) {
@@ -353,7 +368,7 @@ function ensureAdmin(options) {
     admin.role = "admin";
     Object.keys(db.sessions).forEach((t) => { if (db.sessions[t].userId === admin.id) delete db.sessions[t]; });
     audit.log("admin_password_rotated", { actorName: ADMIN_NICKNAME, result: "ok" });
-    saveDb();
+    await saveDb();
     return admin;
   }
   return admin;
@@ -377,6 +392,7 @@ function notify(userId, payload) {
   db.notifications[userId].unshift(item);
   if (db.notifications[userId].length > 200) db.notifications[userId] = db.notifications[userId].slice(0, 200);
   sseHub.sendToUsers([userId], "notify", { notification: item });
+  scheduleSave();
   return item;
 }
 function notifyOthers(topic, exceptUserId, payload) {
@@ -455,6 +471,7 @@ function publicTopic(topic) {
   delete copy.password;
   delete copy.passwordHash;
   delete copy.passwordSalt;
+  delete copy.ai;
   copy.pendingApplications = db.applications.filter((a) => a.topicId === topic.id && a.status === "pending").length;
   return copy;
 }
@@ -466,17 +483,19 @@ function missingTags(topic) {
   return (topic.neededRoles || []).filter((r) => !filled.includes(r));
 }
 function defaultAi() {
-  return { enabled: false, status: "idle", rounds: 0, draft: "", options: [], announcement: null, deep: null, source: "local", model: "本地演示模式", updatedAt: 0 };
+  return { enabled: false, status: "idle", phase: "ANALYZE", rounds: 0, promptVersion: AI.PROMPT_VERSION || "v2.0", draft: "", options: [], announcement: null, deep: null, source: "local", model: "本地演示模式", updatedAt: 0 };
 }
 function ensureAi(topic) {
   if (!topic.ai || typeof topic.ai !== "object") topic.ai = defaultAi();
   if (!Array.isArray(topic.ai.options)) topic.ai.options = [];
   if (typeof topic.ai.rounds !== "number") topic.ai.rounds = 0;
+  if (!topic.ai.phase) topic.ai.phase = "ANALYZE";
+  if (!topic.ai.promptVersion) topic.ai.promptVersion = AI.PROMPT_VERSION || "v2.0";
   return topic.ai;
 }
 function aiView(topic, user) {
   const ai = ensureAi(topic);
-  const base = { enabled: !!ai.enabled, status: ai.status || "idle", rounds: ai.rounds || 0, config: AI.publicConfig() };
+  const base = { enabled: !!ai.enabled, status: ai.status || "idle", phase: ai.phase || "ANALYZE", rounds: ai.rounds || 0, promptVersion: ai.promptVersion || AI.PROMPT_VERSION || "v2.0", config: AI.publicConfig() };
   if (!ai.enabled) return base;
   const member = user && isMember(topic, user.id);
   const owner = isOwner(topic, user);
@@ -506,6 +525,18 @@ function aiView(topic, user) {
   });
 }
 /* AI 输出视为不可信数据：清洗控制字符并限制长度 */
+function consumeAiBudget(userId) {
+  const checks = [
+    ["ai-user:" + userId, SEC.LIMITS.aiPerUser, SEC.LIMITS.aiDailyWindowMs],
+    ["ai-global", SEC.LIMITS.aiPerGlobal, SEC.LIMITS.aiDailyWindowMs]
+  ];
+  for (const item of checks) {
+    const result = rateLimiter.consume(item[0], item[1], item[2]);
+    if (!result.allowed) return result;
+  }
+  return { allowed: true, retryAfter: 0 };
+}
+
 function cleanAiText(value, max) {
   return String(value == null ? "" : value)
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
@@ -530,8 +561,10 @@ function closeVoting(topic) {
   ai.rounds = (ai.rounds || 0) + 1;
   if (!winner || winner.id === "rethink") {
     ai.status = "rethink";
+    ai.phase = "CLARIFY";
   } else {
     ai.status = "decided";
+    ai.phase = "RECOMMEND";
     ai.announcement = { text: winner.title + "：" + (winner.desc || ""), optionId: winner.id, round: ai.rounds, at: Date.now() };
   }
   ai.updatedAt = Date.now();
@@ -592,13 +625,6 @@ function serveStatic(req, res, url) {
 
 /* ---------- 管理员初始化 / 显式密码轮换 ---------- */
 const ROTATE_ADMIN = process.argv.indexOf("--rotate-admin-password") >= 0 || process.argv.indexOf("--init-admin") >= 0;
-if (ROTATE_ADMIN) {
-  ensureAdmin({ rotate: true });
-  console.log("管理员密码已更新（出于安全考虑不会在日志中显示密码）。");
-  process.exit(0);
-}
-ensureAdmin();
-migrateTopicPasswords();
 
 /* ---------- HTTP 服务 ---------- */
 const server = http.createServer(async (req, res) => {
@@ -685,16 +711,37 @@ server.requestTimeout = SEC.LIMITS.requestTimeoutMs;
 server.headersTimeout = Math.min(20000, SEC.LIMITS.requestTimeoutMs);
 server.keepAliveTimeout = 65000;
 
-/* 兜底：未捕获异常/未处理拒绝 → 记录并退出，交由进程守护重启 */
+let shuttingDown = false;
+async function shutdown(signal, exitCode) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  let code = typeof exitCode === "number" ? exitCode : 0;
+  audit.log("shutdown", { detail: signal, result: code === 0 ? "ok" : "error" });
+  try {
+    if (storageReady) await flushDb();
+  } catch (e) {
+    console.error("[STORAGE] 关闭前保存失败：" + (e && e.message));
+    if (code === 0) code = 1;
+  }
+  try { if (storage) await storage.close(); } catch (e) {}
+  server.close(() => process.exit(code));
+  const forced = setTimeout(() => process.exit(code), 5000);
+  if (forced.unref) forced.unref();
+}
+
+process.once("SIGTERM", () => shutdown("SIGTERM", 0));
+process.once("SIGINT", () => shutdown("SIGINT", 0));
+
+/* 兜底：未捕获异常/未处理拒绝 → 记录并安全退出，交由进程守护重启 */
 process.on("unhandledRejection", (err) => {
   audit.log("unhandled_rejection", { detail: String(err && err.message).slice(0, 200), result: "fatal" });
   console.error("[FATAL] 未处理的 Promise 拒绝：" + (err && err.message));
-  process.exit(1);
+  shutdown("unhandled_rejection", 1);
 });
 process.on("uncaughtException", (err) => {
   audit.log("uncaught_exception", { detail: String(err && err.message).slice(0, 200), result: "fatal" });
   console.error("[FATAL] 未捕获异常：" + (err && err.message));
-  process.exit(1);
+  shutdown("uncaught_exception", 1);
 });
 
 /* 定期清理：过期会话 + 过期 SSE 票据 */
@@ -706,13 +753,14 @@ setInterval(() => {
     if (sess && sess.expiresAt && now > sess.expiresAt) { delete db.sessions[t]; changed = true; }
   });
   for (const [k, v] of sseTickets) { if (now > v.expiresAt) sseTickets.delete(k); }
-  if (changed) saveDb();
+  for (const [key, fail] of loginFailures) {
+    const last = fail && fail.until > now ? fail.until : ((fail && fail.updatedAt) || 0);
+    if (!last || now - last > SEC.LIMITS.loginWindowMs) loginFailures.delete(key);
+  }
+  if (changed) saveDb().catch(() => {});
 }, 10 * 60 * 1000).unref();
 
-server.listen(PORT, () => {
-  console.log("ProjectHub 已启动： http://localhost:" + PORT);
-  console.log("数据文件： " + DATA_FILE);
-});
+
 
 /* ================= API ================= */
 function viewTopic(topic, user) {
@@ -730,19 +778,40 @@ function viewTopic(topic, user) {
     copy.memberCount = topic.members.length;
     copy.members = [];
     copy.memberHidden = true;
+    copy.desc = "";
+    copy.vibe = "";
+    copy.required = [];
   }
   return copy;
 }
 
-function removeTopicData(topicId) {
-  const metas = db.files[topicId] || [];
-  metas.forEach((f) => {
-    try { fs.unlinkSync(path.join(FILES_DIR, f.storedName)); } catch (e) {}
-  });
+async function removeTopicData(topicId) {
+  const metas = (db.files[topicId] || []).slice();
   delete db.files[topicId];
   delete db.messages[topicId];
   db.topics = db.topics.filter((t) => t.id !== topicId);
   db.applications = db.applications.filter((a) => a.topicId !== topicId);
+  return metas;
+}
+
+async function purgeStoredFiles(metas, topicId) {
+  for (const file of metas || []) {
+    try { await storage.deleteFile(file.storedName); } catch (e) {
+      audit.log("file_delete_failed", { topicId: topicId, target: file.id, result: "error", detail: String(e && e.message).slice(0, 120) });
+    }
+  }
+}
+
+async function migrateLocalFilesToStorage() {
+  if (!storage || typeof storage.migrateLocalFile !== "function") return 0;
+  let migrated = 0;
+  const metas = Object.keys(db.files).flatMap((topicId) => db.files[topicId] || []);
+  for (const file of metas) {
+    const localPath = path.join(FILES_DIR, file.storedName);
+    if (await storage.migrateLocalFile(file.storedName, localPath)) migrated += 1;
+  }
+  if (migrated > 0) audit.log("files_migrated_to_storage", { detail: String(migrated), result: "ok" });
+  return migrated;
 }
 
 async function handleApi(req, res, url) {
@@ -777,10 +846,17 @@ async function handleApi(req, res, url) {
 
   if (m === "OPTIONS") { sendJson(res, 204, {}); return; }
 
-  /* ---- 健康检查（生产环境只返回最小状态） ---- */
+  /* ---- 健康检查：检查持久化依赖，不只检查进程存活 ---- */
   if (p1 === "health" && m === "GET") {
-    if (IS_PROD) { sendJson(res, 200, { ok: true }); return; }
-    sendJson(res, 200, { ok: true, topics: db.topics.length, users: Object.keys(db.users).length });
+    try {
+      const health = storage ? await storage.health() : { ok: false };
+      if (!health.ok) { sendJson(res, 503, { ok: false }); return; }
+      if (IS_PROD) { sendJson(res, 200, { ok: true }); return; }
+      sendJson(res, 200, { ok: true, driver: health.driver, persistent: !!health.persistent, topics: db.topics.length, users: Object.keys(db.users).length });
+    } catch (e) {
+      audit.log("health_failed", { detail: String(e && e.message).slice(0, 160), result: "error" });
+      sendJson(res, 503, { ok: false });
+    }
     return;
   }
 
@@ -827,7 +903,7 @@ async function handleApi(req, res, url) {
     const token = createSession(u.id);
     const csrf = issueCsrfToken();
     setSessionCookies(req, res, token, csrf);
-    saveDb();
+    await saveDb();
     audit.log("register_success", { actorId: u.id, actorName: nickname, ip: SEC.clientIp(req), result: "ok" });
     const payload = { user: publicUser(u), csrf: csrf };
     if (String(req.headers["x-client"] || "") === "api") payload.token = token;   // 仅 API 客户端获取 Token
@@ -867,7 +943,7 @@ async function handleApi(req, res, url) {
       const prev = fail ? (fail.count || 0) : 0;
       const count = prev + 1;
       const windowMs = SEC.LIMITS.loginWindowMs;
-      loginFailures.set(accountKey, { count: count, until: count >= SEC.LIMITS.loginPerAccount ? Date.now() + windowMs : 0 });
+      loginFailures.set(accountKey, { count: count, until: count >= SEC.LIMITS.loginPerAccount ? Date.now() + windowMs : 0, updatedAt: Date.now() });
       audit.log("login_failed", { actorName: nickname, ip: ip, result: "deny", detail: "bad-credentials" });
       sendJson(res, 401, { error: "昵称或密码不正确" });
       return;
@@ -881,7 +957,7 @@ async function handleApi(req, res, url) {
     const token = createSession(u.id);
     const csrf = issueCsrfToken();
     setSessionCookies(req, res, token, csrf);
-    saveDb();
+    await saveDb();
     audit.log(u.role === "admin" ? "admin_login" : "login_success", { actorId: u.id, actorName: u.nickname, ip: ip, result: "ok" });
     const payload = { user: publicUser(u), csrf: csrf };
     if (String(req.headers["x-client"] || "") === "api") payload.token = token;
@@ -893,10 +969,11 @@ async function handleApi(req, res, url) {
   if (p1 === "logout" && m === "POST") {
     const token = authToken(req).token;
     clearSessionCookies(res);
-    if (token && db.sessions[token]) {
-      const sess = db.sessions[token];
-      delete db.sessions[token];
-      saveDb();
+    const key = token ? sessionKey(token) : "";
+    if (key && db.sessions[key]) {
+      const sess = db.sessions[key];
+      delete db.sessions[key];
+      await saveDb();
       audit.log("logout", { actorId: sess.userId, ip: SEC.clientIp(req), result: "ok" });
     }
     sendJson(res, 200, { ok: true });
@@ -914,7 +991,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     if (Array.isArray(body.directions)) user.directions = body.directions.filter((x) => MAJOR_IDS.indexOf(x) >= 0).slice(0, 5);
     if (typeof body.grade === "string" && body.grade) user.grade = body.grade.slice(0, 12);
-    saveDb();
+    await saveDb();
     sendJson(res, 200, { user: publicUser(user) });
     return;
   }
@@ -966,7 +1043,7 @@ async function handleApi(req, res, url) {
     db.topics.unshift(topic);
     db.messages[topic.id] = [];
     db.files[topic.id] = [];
-    saveDb();
+    await saveDb();
     audit.log("topic_created", { actorId: user.id, actorName: user.nickname, topicId: topic.id, target: title, result: "ok", detail: type });
     broadcastPing("topics", { action: "created", topicId: topic.id });
     sendJson(res, 200, { topic: viewTopic(topic, user) });
@@ -988,7 +1065,12 @@ async function handleApi(req, res, url) {
   }
   if (p1 === "my-applications" && m === "GET") {
     if (!user) { sendJson(res, 200, { applications: [] }); return; }
-    const list = db.applications.filter((a) => a.userId === user.id).map((a) => ({ topicId: a.topicId, status: a.status, at: a.createdAt }));
+    const latest = new Map();
+    db.applications
+      .filter((a) => a.userId === user.id)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .forEach((a) => latest.set(a.topicId, a));
+    const list = Array.from(latest.values()).map((a) => ({ topicId: a.topicId, applicationId: a.id, status: a.status, at: a.createdAt, decidedAt: a.decidedAt || 0 }));
     sendJson(res, 200, { applications: list });
     return;
   }
@@ -1034,7 +1116,7 @@ async function handleApi(req, res, url) {
     };
     db.reports.unshift(report);
     if (db.reports.length > 500) db.reports = db.reports.slice(0, 500);
-    saveDb();
+    await saveDb();
     audit.log("report_submitted", { actorId: user.id, topicId: report.topicId, targetId: report.targetUserId, reason: reason, result: "ok" });
     Object.keys(db.users).forEach((k) => { if (db.users[k].role === "admin") notify(k, { type: "report", topicId: report.topicId, topicTitle: report.topicTitle, from: user.nickname, text: "收到一条举报：" + reason }); });
     sendJson(res, 200, { ok: true, id: report.id });
@@ -1052,7 +1134,7 @@ async function handleApi(req, res, url) {
     rep.status = "resolved";
     rep.handledAt = Date.now();
     rep.handledBy = user.nickname;
-    saveDb();
+    await saveDb();
     audit.log("report_resolved", { actorId: user.id, targetId: rep.id, result: "ok" });
     sendJson(res, 200, { report: rep });
     return;
@@ -1078,7 +1160,7 @@ async function handleApi(req, res, url) {
     if (target.banned) {
       Object.keys(db.sessions).forEach((tok) => { if (db.sessions[tok].userId === target.id) delete db.sessions[tok]; });
     }
-    saveDb();
+    await saveDb();
     audit.log(target.banned ? "admin_ban_user" : "admin_unban_user", { actorId: user.id, actorName: user.nickname, targetId: target.id, target: target.nickname, result: "ok" });
     sendJson(res, 200, { user: publicUser(target) });
     return;
@@ -1095,8 +1177,9 @@ async function handleApi(req, res, url) {
     if (!action && m === "DELETE") {
       if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
       if (!isOwner(topic, user)) { auditDenied(user, topic, "topic:delete"); sendJson(res, 403, { error: "只有项目负责人或管理员才能删除该项目" }); return; }
-      removeTopicData(topic.id);
-      saveDb();
+      const removedFiles = await removeTopicData(topic.id);
+      await saveDb();
+      await purgeStoredFiles(removedFiles, topic.id);
       audit.log("topic_deleted", { actorId: user.id, actorName: user.nickname, topicId: topic.id, target: topic.title, result: "ok", detail: isOwner(topic, user) && topic.creatorId !== user.id ? "by-admin" : "by-owner" });
       broadcastPing("topics", { action: "deleted", topicId: topic.id });
       sendJson(res, 200, { ok: true });
@@ -1118,7 +1201,7 @@ async function handleApi(req, res, url) {
       ai.enabled = !!body.enabled;
       if (!ai.enabled) { ai.status = "idle"; ai.options = []; }
       ai.updatedAt = Date.now();
-      saveDb();
+      await saveDb();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       sendJson(res, 200, { ai: aiView(topic, user) });
       return;
@@ -1130,6 +1213,7 @@ async function handleApi(req, res, url) {
       const ai = ensureAi(topic);
       if (!ai.enabled) { sendJson(res, 400, { error: "还没有引入 AI 助手" }); return; }
       if (ai.status === "thinking") { sendJson(res, 400, { error: "AI 正在思考中，请稍等" }); return; }
+      if ((ai.rounds || 0) >= 10) { sendJson(res, 400, { error: "已达到 10 轮思考上限，请先确认方案或结束 AI 思考" }); return; }
       const aiRl = rateLimiter.consume("ai:" + topic.id, SEC.LIMITS.aiPerTopic, SEC.LIMITS.aiWindowMs);
       if (!aiRl.allowed) {
         audit.log("rate_limited", { actorId: user.id, topicId: topic.id, path: "ai:think", result: "deny" });
@@ -1137,18 +1221,29 @@ async function handleApi(req, res, url) {
         sendJson(res, 429, { error: "AI 调用过于频繁，请稍后再试" });
         return;
       }
+      const aiBudget = consumeAiBudget(user.id);
+      if (!aiBudget.allowed) {
+        audit.log("rate_limited", { actorId: user.id, topicId: topic.id, path: "ai:think", result: "deny" });
+        res.setHeader("Retry-After", String(aiBudget.retryAfter));
+        sendJson(res, 429, { error: "AI 今日调用额度已用完，请稍后再试" });
+        return;
+      }
       const aiGate = aiInflight.enter("ai");
       if (!aiGate.ok) { sendJson(res, 503, { error: aiGate.reason }); return; }
       await AI.resolveConfig();
       ai.status = "thinking";
+      ai.phase = "ANALYZE";
+      ai.promptVersion = AI.PROMPT_VERSION || "v2.0";
       ai.draft = "";
       ai.options = [];
       ai.updatedAt = Date.now();
-      saveDb();
+      await saveDb();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       const msgs = db.messages[topic.id] || [];
       try {
+        ai.phase = "RESEARCH";
         const draftRes = await AI.generateDraft(topic, msgs);
+        ai.phase = "GENERATE";
         const dirRes = await AI.generateDirections(topic, msgs, draftRes.draft);
         ai.draft = cleanAiText(draftRes.draft, 8000);
         ai.source = draftRes.source;
@@ -1162,6 +1257,7 @@ async function handleApi(req, res, url) {
         }));
         ai.options.push({ id: "rethink", title: "再想想", desc: "这些方向都不太符合预期，想继续和组员讨论。", reason: "", votes: [] });
         ai.status = "voting";
+        ai.phase = "WAIT_FOR_LEADER";
       } catch (e) {
         console.error("[AI] 思考失败：", e.message);
         audit.log("ai_error", { actorId: user.id, topicId: topic.id, result: "error", detail: String(e.message).slice(0, 120) });
@@ -1170,7 +1266,7 @@ async function handleApi(req, res, url) {
         aiInflight.leave("ai");
       }
       ai.updatedAt = Date.now();
-      saveDb();
+      await saveDb();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       audit.log("ai_think", { actorId: user.id, topicId: topic.id, result: "ok", detail: ai.model || "" });
       sendJson(res, 200, { ai: aiView(topic, user) });
@@ -1205,7 +1301,7 @@ async function handleApi(req, res, url) {
       const ai = ensureAi(topic);
       if (ai.status !== "voting") { sendJson(res, 400, { error: "现在不在投票阶段" }); return; }
       closeVoting(topic);
-      saveDb();
+      await saveDb();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       sendJson(res, 200, { ai: aiView(topic, user) });
       return;
@@ -1224,12 +1320,20 @@ async function handleApi(req, res, url) {
         sendJson(res, 429, { error: "AI 调用过于频繁，请稍后再试" });
         return;
       }
+      const aiBudget = consumeAiBudget(user.id);
+      if (!aiBudget.allowed) {
+        audit.log("rate_limited", { actorId: user.id, topicId: topic.id, path: "ai:deep", result: "deny" });
+        res.setHeader("Retry-After", String(aiBudget.retryAfter));
+        sendJson(res, 429, { error: "AI 今日调用额度已用完，请稍后再试" });
+        return;
+      }
       const deepGate = aiInflight.enter("ai");
       if (!deepGate.ok) { sendJson(res, 503, { error: deepGate.reason }); return; }
       await AI.resolveConfig();
       ai.status = "thinking";
+      ai.phase = "DECOMPOSE";
       ai.updatedAt = Date.now();
-      saveDb();
+      await saveDb();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       const msgs = db.messages[topic.id] || [];
       try {
@@ -1243,6 +1347,7 @@ async function handleApi(req, res, url) {
         }));
         ai.deep = { at: Date.now(), items: safeItems, source: deepRes.source, model: deepRes.model };
         ai.status = "assigned";
+        ai.phase = "ASSIGN";
       } catch (e) {
         console.error("[AI] 深度思考失败：", e.message);
         audit.log("ai_error", { actorId: user.id, topicId: topic.id, path: "ai:deep", result: "error", detail: String(e.message).slice(0, 120) });
@@ -1251,7 +1356,7 @@ async function handleApi(req, res, url) {
         aiInflight.leave("ai");
       }
       ai.updatedAt = Date.now();
-      saveDb();
+      await saveDb();
       broadcastTopic(topic, "ai", { topicId: topic.id });
       audit.log("ai_deep", { actorId: user.id, topicId: topic.id, result: "ok", detail: ai.model || "" });
       sendJson(res, 200, { ai: aiView(topic, user) });
@@ -1264,8 +1369,27 @@ async function handleApi(req, res, url) {
       if (user.banned) { sendJson(res, 403, { error: "该账号已被封禁" }); return; }
       if (isMember(topic, user.id)) { sendJson(res, 400, { error: "你已经是该话题成员" }); return; }
       if (topic.members.length >= topic.limit) { sendJson(res, 400, { error: "该项目已经满员" }); return; }
+      const applyRl = rateLimiter.consume("apply:" + user.id, SEC.LIMITS.applicationPerUser, SEC.LIMITS.applicationWindowMs);
+      if (!applyRl.allowed) {
+        audit.log("rate_limited", { actorId: user.id, topicId: topic.id, path: "applications:create", result: "deny" });
+        res.setHeader("Retry-After", String(applyRl.retryAfter));
+        sendJson(res, 429, { error: "申请提交过于频繁，请稍后再试" });
+        return;
+      }
       const existing = db.applications.find((a) => a.topicId === topic.id && a.userId === user.id && a.status === "pending");
       if (existing) { sendJson(res, 200, { application: existing, duplicated: true }); return; }
+      const previous = db.applications
+        .filter((a) => a.topicId === topic.id && a.userId === user.id && (a.status === "rejected" || a.status === "cancelled"))
+        .sort((a, b) => (b.decidedAt || b.createdAt) - (a.decidedAt || a.createdAt))[0];
+      if (previous && SEC.LIMITS.applicationReapplyCooldownMs > 0) {
+        const availableAt = (previous.decidedAt || previous.createdAt) + SEC.LIMITS.applicationReapplyCooldownMs;
+        if (availableAt > Date.now()) {
+          const waitSeconds = Math.ceil((availableAt - Date.now()) / 1000);
+          res.setHeader("Retry-After", String(waitSeconds));
+          sendJson(res, 429, { error: "暂不能重复申请，请等待冷却结束后再试", retryAfter: waitSeconds });
+          return;
+        }
+      }
       const body = await readBody(req);
       if (topic.type === "private") {
         if (!verifyTopicPassword(topic, String(body.password || ""))) {
@@ -1289,9 +1413,25 @@ async function handleApi(req, res, url) {
         decidedAt: 0
       };
       db.applications.push(app);
-      saveDb();
+      await saveDb();
       notify(topic.creatorId, { type: "apply", topicId: topic.id, topicTitle: topic.title, from: user.nickname, text: "申请加入你的项目" + (app.message ? "：" + app.message.slice(0, 40) : "") });
       sseHub.sendToUsers([topic.creatorId], "applications", { action: "created", applicationId: app.id, topicId: topic.id });
+      sendJson(res, 200, { application: app });
+      return;
+    }
+
+    /* 申请人取消自己的待处理申请 */
+    if (action === "applications" && parts.length === 4 && m === "DELETE") {
+      if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
+      const app = db.applications
+        .filter((a) => a.topicId === topic.id && a.userId === user.id && a.status === "pending")
+        .sort((a, b) => b.createdAt - a.createdAt)[0];
+      if (!app) { sendJson(res, 404, { error: "没有可取消的申请" }); return; }
+      app.status = "cancelled";
+      app.decidedAt = Date.now();
+      await saveDb();
+      notify(topic.creatorId, { type: "application_cancelled", topicId: topic.id, topicTitle: topic.title, from: user.nickname, text: "取消了对该项目的加入申请" });
+      sseHub.sendToUsers([topic.creatorId, user.id], "applications", { action: "cancelled", applicationId: app.id, topicId: topic.id });
       sendJson(res, 200, { application: app });
       return;
     }
@@ -1342,9 +1482,10 @@ async function handleApi(req, res, url) {
         }
       }
 
+      const messageAt = Date.now();
       const message = {
         id: newId("m"), author: user.id, authorName: user.nickname, text: text,
-        replyTo: replyTo, mentions: [], recalled: false, time: nowTimeStr(), at: Date.now()
+        replyTo: replyTo, mentions: [], recalled: false, time: new Date(messageAt).toISOString(), at: messageAt
       };
 
       /* @ 成员 */
@@ -1375,6 +1516,30 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    /* 编辑消息：仅作者本人，且不能编辑已撤回消息 */
+    if (action === "messages" && parts.length === 5 && m === "PATCH") {
+      if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
+      if (user.banned) { sendJson(res, 403, { error: "该账号已被封禁" }); return; }
+      if (!isMember(topic, user.id) && user.role !== "admin") { sendJson(res, 403, { error: "只有话题成员才能编辑消息" }); return; }
+      const msg = (db.messages[topic.id] || []).find((x) => x.id === part(4));
+      if (!msg) { sendJson(res, 404, { error: "消息不存在" }); return; }
+      if (msg.author !== user.id) { auditDenied(user, topic, "messages:edit"); sendJson(res, 403, { error: "只能编辑自己发送的消息" }); return; }
+      if (msg.recalled) { sendJson(res, 400, { error: "已撤回的消息不能编辑" }); return; }
+      const msgRl = rateLimiter.consume("msg:" + user.id, SEC.LIMITS.messagePerUser, SEC.LIMITS.messageWindowMs);
+      if (!msgRl.allowed) { res.setHeader("Retry-After", String(msgRl.retryAfter)); sendJson(res, 429, { error: "操作过于频繁，请稍后再试" }); return; }
+      const body = await readBody(req);
+      const text = String(body.text || "").trim().slice(0, 1000);
+      if (!text) { sendJson(res, 400, { error: "消息不能为空" }); return; }
+      msg.text = text;
+      msg.mentions = topic.members.filter((m) => m.id !== user.id && m.nickname && text.indexOf("@" + m.nickname) >= 0).map((m) => m.id);
+      msg.edited = true;
+      msg.editedAt = Date.now();
+      await saveDb();
+      broadcastTopic(topic, "message", { topicId: topic.id, message: msg });
+      sendJson(res, 200, { message: msg });
+      return;
+    }
+
     /* 撤回消息：作者本人或负责人 / 管理员 */
     if (action === "messages" && parts.length === 5 && m === "DELETE") {
       if (!user) { sendJson(res, 401, { error: "未登录" }); return; }
@@ -1383,7 +1548,7 @@ async function handleApi(req, res, url) {
       const msg = list.find((x) => x.id === msgId);
       if (!msg) { sendJson(res, 404, { error: "消息不存在" }); return; }
       const mine = msg.author === user.id;
-      if (!mine && !isOwner(topic, user)) { sendJson(res, 403, { error: "只能撤回自己发送的消息" }); return; }
+      if (!mine) { auditDenied(user, topic, "messages:recall"); sendJson(res, 403, { error: "只能撤回自己发送的消息" }); return; }
       if (!msg.recalled) {
         msg.recalled = true;
         msg.recalledAt = Date.now();
@@ -1439,17 +1604,25 @@ async function handleApi(req, res, url) {
       /* 容量配额：单话题文件数 + 单用户总容量 */
       const topicFiles = db.files[topic.id] || [];
       if (topicFiles.length >= SEC.LIMITS.maxFilesPerTopic) { sendJson(res, 429, { error: "该项目的文件数量已达上限" }); return; }
-      let used = 0, count = 0;
-      Object.keys(db.files).forEach((tid) => (db.files[tid] || []).forEach((f) => { if (f.uploaderId === user.id) { used += f.size || 0; count += 1; } }));
+      let used = 0, globalUsed = 0, count = 0;
+      Object.keys(db.files).forEach((tid) => (db.files[tid] || []).forEach((f) => {
+        const size = f.size || 0;
+        globalUsed += size;
+        if (f.uploaderId === user.id) { used += size; count += 1; }
+      }));
       if (used + buffer.length > SEC.LIMITS.maxStoragePerUser) {
         audit.log("upload_quota_exceeded", { actorId: user.id, result: "deny", detail: String(used) });
         sendJson(res, 413, { error: "你的存储空间已用尽（上限 " + Math.round(SEC.LIMITS.maxStoragePerUser / 1048576) + "MB）" });
         return;
       }
-      fs.mkdirSync(FILES_DIR, { recursive: true });
+      if (globalUsed + buffer.length > SEC.LIMITS.maxStorageGlobal) {
+        audit.log("upload_global_quota_exceeded", { actorId: user.id, result: "deny", detail: String(globalUsed) });
+        sendJson(res, 413, { error: "网站存储空间已满，请联系管理员" });
+        return;
+      }
       const fileId = newId("f");
       const storedName = fileId + ext;
-      fs.writeFileSync(path.join(FILES_DIR, storedName), buffer);
+      await storage.saveFile(storedName, buffer);
       const meta = {
         id: fileId,
         topicId: topic.id,
@@ -1463,7 +1636,13 @@ async function handleApi(req, res, url) {
       };
       if (!db.files[topic.id]) db.files[topic.id] = [];
       db.files[topic.id].push(meta);
-      saveDb();
+      try {
+        await saveDb();
+      } catch (e) {
+        db.files[topic.id].pop();
+        try { await storage.deleteFile(storedName); } catch (e2) {}
+        throw e;
+      }
       notifyOthers(topic, user.id, { type: "file", topicId: topic.id, topicTitle: topic.title, from: user.nickname, text: "上传了文件：" + name });
       broadcastTopic(topic, "files", { topicId: topic.id });
       audit.log("file_uploaded", { actorId: user.id, topicId: topic.id, target: fileId, result: "ok", detail: (buffer.length + "B") });
@@ -1481,9 +1660,11 @@ async function handleApi(req, res, url) {
       const meta = list[idx];
       const mine = meta.uploaderId === user.id;
       if (!mine && !isOwner(topic, user)) { auditDenied(user, topic, "files:delete"); sendJson(res, 403, { error: "只能删除自己上传的文件" }); return; }
-      try { fs.unlinkSync(path.join(FILES_DIR, meta.storedName)); } catch (e) {}
       list.splice(idx, 1);
-      saveDb();
+      await saveDb();
+      try { await storage.deleteFile(meta.storedName); } catch (e) {
+        audit.log("file_delete_failed", { actorId: user.id, topicId: topic.id, target: fileId, result: "error", detail: String(e && e.message).slice(0, 120) });
+      }
       audit.log("file_deleted", { actorId: user.id, topicId: topic.id, target: fileId, result: "ok" });
       broadcastTopic(topic, "files", { topicId: topic.id });
       sendJson(res, 200, { ok: true });
@@ -1498,7 +1679,7 @@ async function handleApi(req, res, url) {
       if (memberId === topic.creatorId) { sendJson(res, 400, { error: "不能移出项目负责人" }); return; }
       if (!isMember(topic, memberId)) { sendJson(res, 404, { error: "该成员不在话题中" }); return; }
       topic.members = topic.members.filter((x) => x.id !== memberId);
-      saveDb();
+      await saveDb();
       audit.log("member_removed", { actorId: user.id, topicId: topic.id, targetId: memberId, result: "ok" });
       notify(memberId, { type: "removed", topicId: topic.id, topicTitle: topic.title, from: topic.members[0] ? topic.members[0].nickname : "负责人", text: "你已被移出该项目" });
       broadcastPing("topics", { action: "memberRemoved", topicId: topic.id });
@@ -1515,7 +1696,7 @@ async function handleApi(req, res, url) {
       const tag = String(body.tag || "");
       if (tag && ROLE_TAGS.indexOf(tag) < 0) { sendJson(res, 400, { error: "标签不合法" }); return; }
       member.tag = tag;
-      saveDb();
+      await saveDb();
       broadcastPing("topics", { action: "tagChanged", topicId: topic.id });
       sendJson(res, 200, { topic: viewTopic(topic, user) });
       return;
@@ -1543,7 +1724,7 @@ async function handleApi(req, res, url) {
       app.status = "rejected";
     }
     app.decidedAt = Date.now();
-    saveDb();
+    await saveDb();
     notify(app.userId, {
       type: parts[3] === "approve" ? "approved" : "rejected",
       topicId: topic.id,
@@ -1568,8 +1749,8 @@ async function handleApi(req, res, url) {
     if (!user) { sendJson(res, 401, { error: "请先登录" }); return; }
     const topic = findTopic(meta.topicId);
     if (!topic || (!isMember(topic, user.id) && user.role !== "admin")) { auditDenied(user, topic, "files:download"); sendJson(res, 403, { error: "只有话题成员才能查看文件" }); return; }
-    const target = path.join(FILES_DIR, meta.storedName);
-    if (!fs.existsSync(target)) { sendJson(res, 404, { error: "文件已丢失" }); return; }
+    const buffer = await storage.readFile(meta.storedName);
+    if (!buffer) { sendJson(res, 404, { error: "文件已丢失" }); return; }
     /* 图片可内联预览；Word 等文档强制下载，避免被浏览器当作内容渲染 */
     const isImage = String(meta.type || "").indexOf("image/") === 0;
     const dlHeaders = {
@@ -1579,7 +1760,7 @@ async function handleApi(req, res, url) {
     };
     SEC.applySecurityHeaders(res, dlHeaders, req);
     res.writeHead(200, dlHeaders);
-    fs.createReadStream(target).pipe(res);
+    res.end(buffer);
     return;
   }
 
@@ -1587,4 +1768,42 @@ async function handleApi(req, res, url) {
 }
 
 function isSixDigits(s) { return typeof s === "string" && s.length === 6 && /^[0-9]{6}$/.test(s); }
-function nowTimeStr() { return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); }
+/* ---------- 启动：先加载持久化数据，再开放 HTTP 服务 ---------- */
+async function bootstrap() {
+  storage = await STORAGE.createStorage({
+    root: ROOT,
+    dataDir: DATA_DIR,
+    dataFile: DATA_FILE,
+    filesDir: FILES_DIR,
+    production: IS_PROD,
+    env: process.env
+  });
+  storageReady = true;
+  const loaded = await storage.loadState();
+  db = normalizeDb(loaded || emptyDb());
+  if (storage.migratedFromLegacy) {
+    audit.log("state_migrated_to_postgres", { result: "ok" });
+    console.log("[STORAGE] 已将本地 JSON 数据迁移到 PostgreSQL；原文件保留用于回滚。");
+  }
+  await migrateSessionTokens();
+  await migrateTopicPasswords();
+  await migrateLocalFilesToStorage();
+  if (ROTATE_ADMIN) {
+    await ensureAdmin({ rotate: true });
+    await flushDb();
+    await storage.close();
+    console.log("管理员密码已更新（出于安全考虑不会在日志中显示密码）。");
+    process.exit(0);
+  }
+  await ensureAdmin();
+  server.listen(PORT, () => {
+    console.log("ProjectHub 已启动： http://localhost:" + PORT);
+    console.log("存储驱动：" + storage.driver + (storage.persistent ? "（持久化）" : "（仅开发/测试）"));
+  });
+}
+
+bootstrap().catch(async (e) => {
+  console.error("[FATAL] ProjectHub 启动失败：" + (e && e.message));
+  try { if (storage) await storage.close(); } catch (e2) {}
+  process.exit(1);
+});

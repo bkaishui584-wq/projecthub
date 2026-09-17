@@ -32,6 +32,12 @@ if ($ollamaExe) {
 # 2. 环境变量（ADMIN_PASSWORD 等敏感配置保存在项目根的 .env 中，服务启动时会自动读取）
 if (-not $env:NODE_ENV) { $env:NODE_ENV = "production" }
 if (-not $env:TRUST_PROXY) { $env:TRUST_PROXY = "1" }
+# 临时公网演示默认使用本地持久化目录；生产部署必须配置 DATABASE_URL
+$hasDatabase = [bool]$env:DATABASE_URL -or (Test-Path (Join-Path $dir ".env") -and [bool](Select-String -Path (Join-Path $dir ".env") -Pattern "^DATABASE_URL=.+$"))
+if (-not $hasDatabase) {
+  if (-not $env:STORAGE_DRIVER) { $env:STORAGE_DRIVER = "file" }
+  if (-not $env:ALLOW_EPHEMERAL_STORAGE) { $env:ALLOW_EPHEMERAL_STORAGE = "1" }
+}
 # 3. 启动 ProjectHub 服务器
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 $nodeExe = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Users\YUNIAN\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" }
