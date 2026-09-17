@@ -174,6 +174,7 @@ $env:DATABASE_URL="postgresql://..."
 $env:DATABASE_SSL="require"
 npm run db:migrate
 npm run db:check
+npm run db:backup
 ```
 
 `db:migrate` 会把本机 `data/store.json` 和 `data/files/` 导入空数据库。
