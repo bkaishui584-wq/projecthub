@@ -9,7 +9,8 @@
     "test": "node --test test/*.test.js",
     "db:check": "node scripts/db-check.js",
     "db:migrate": "node scripts/db-migrate.js",
-    "db:import-local": "node scripts/db-import-local.js"
+    "db:import-local": "node scripts/db-import-local.js",
+    "db:backup": "node scripts/db-backup.js"
   },
   "engines": {
     "node": ">=18"
