@@ -2,23 +2,18 @@
 
 const fs = require("fs");
 const path = require("path");
-const { Pool } = require("pg");
+const { createStorage } = require("../storage");
 const { loadDotEnv } = require("./storage-common");
 
 const ROOT = path.resolve(__dirname, "..");
 
-function connectionOptions() {
-  const mode = String(process.env.DATABASE_SSL || "").toLowerCase();
-  const ssl = mode === "require" ? { rejectUnauthorized: false } : (mode === "verify-full" ? true : false);
-  return { connectionString: process.env.DATABASE_URL, ssl };
-}
-
-function countRemoteUserContent(state) {
+function countUserContent(state) {
+  const src = state || {};
   return {
-    users: Object.keys(state.users || {}).length,
-    topics: Array.isArray(state.topics) ? state.topics.length : 0,
-    messages: Object.values(state.messages || {}).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0),
-    applications: Array.isArray(state.applications) ? state.applications.length : 0
+    users: Object.keys(src.users || {}).length,
+    topics: Array.isArray(src.topics) ? src.topics.length : 0,
+    messages: Object.values(src.messages || {}).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0),
+    applications: Array.isArray(src.applications) ? src.applications.length : 0
   };
 }
 
@@ -29,11 +24,17 @@ async function main() {
   const localFile = path.join(dataDir, "store.json");
   if (!fs.existsSync(localFile)) throw new Error("找不到本地 data/store.json");
   const local = JSON.parse(fs.readFileSync(localFile, "utf8"));
-  const pool = new Pool(connectionOptions());
+  const store = await createStorage({
+    root: ROOT,
+    dataDir: dataDir,
+    dataFile: localFile,
+    filesDir: path.join(dataDir, "files"),
+    production: process.env.NODE_ENV === "production",
+    env: process.env
+  });
   try {
-    const result = await pool.query("SELECT state FROM projecthub_state WHERE id = 1");
-    const remote = result.rows && result.rows[0] ? result.rows[0].state : null;
-    const remoteCounts = countRemoteUserContent(remote || {});
+    const remote = await store.loadState();
+    const remoteCounts = countUserContent(remote);
     if (remoteCounts.topics || remoteCounts.messages || remoteCounts.applications) {
       throw new Error("远程数据库已有项目、消息或申请数据，拒绝自动导入；请改用人工迁移");
     }
@@ -48,16 +49,20 @@ async function main() {
     }
     if (remoteAdmins[0]) merged.users[remoteAdmins[0].id] = remoteAdmins[0];
     merged.sessions = {};
-    await pool.query(
-      `INSERT INTO projecthub_state (id, schema_version, state, updated_at)
-       VALUES (1, 1, $1::jsonb, now())
-       ON CONFLICT (id) DO UPDATE SET schema_version = 1, state = EXCLUDED.state, updated_at = now()`,
-      [JSON.stringify(merged)]
-    );
-    const finalCounts = countRemoteUserContent(merged);
-    console.log(JSON.stringify({ ok: true, importedUsers: Object.keys(merged.users || {}).length, topics: finalCounts.topics, messages: finalCounts.messages, applications: finalCounts.applications }, null, 2));
+    await store.saveState(merged);
+    let filesMigrated = 0;
+    if (typeof store.migrateLocalFile === "function") {
+      const localFilesDir = path.join(dataDir, "files");
+      for (const topicId of Object.keys(merged.files || {})) {
+        for (const file of merged.files[topicId] || []) {
+          if (await store.migrateLocalFile(file.storedName, path.join(localFilesDir, file.storedName))) filesMigrated += 1;
+        }
+      }
+    }
+    const counts = countUserContent(merged);
+    console.log(JSON.stringify({ ok: true, users: Object.keys(merged.users || {}).length, topics: counts.topics, messages: counts.messages, applications: counts.applications, filesMigrated: filesMigrated }, null, 2));
   } finally {
-    await pool.end();
+    await store.close();
   }
 }
 
