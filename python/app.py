@@ -40,6 +40,7 @@ app.config["JSON_AS_ASCII"] = False
 
 ADMIN_NICKNAME = os.environ.get("ADMIN_NICKNAME", "白开水")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD_REVISION = os.environ.get("ADMIN_PASSWORD_REVISION", "1").strip() or "1"
 SESSION_TTL = 7 * 24 * 3600
 SESSION_COOKIE = "ph_session"
 CSRF_COOKIE = "ph_csrf"
@@ -438,6 +439,17 @@ def close_voting(topic: dict[str, Any]) -> dict[str, Any]:
 def ensure_admin() -> None:
     admin = find_user_by_nickname(ADMIN_NICKNAME)
     if admin:
+        # Updating ADMIN_PASSWORD alone must not silently keep an old hash.
+        # A revision change applies the new password once and invalidates old sessions.
+        if ADMIN_PASSWORD and str(admin.get("passwordRevision") or "") != ADMIN_PASSWORD_REVISION:
+            salt = sec.make_salt()
+            admin["salt"] = salt
+            admin["hash"] = sec.hash_password(ADMIN_PASSWORD, salt)
+            admin["passwordRevision"] = ADMIN_PASSWORD_REVISION
+            for token, session in list(STATE.state["sessions"].items()):
+                if session.get("userId") == admin.get("id"):
+                    STATE.state["sessions"].pop(token, None)
+            STATE.save()
         return
     if not ADMIN_PASSWORD:
         raise RuntimeError("尚未创建管理员，必须配置 ADMIN_PASSWORD")
@@ -449,6 +461,7 @@ def ensure_admin() -> None:
         "grade": "管理员",
         "salt": salt,
         "hash": sec.hash_password(ADMIN_PASSWORD, salt),
+        "passwordRevision": ADMIN_PASSWORD_REVISION,
         "role": "admin",
         "banned": False,
         "directions": [],
