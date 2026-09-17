@@ -271,3 +271,35 @@ test("admin password rotation invalidates the old credential", async (t) => {
   const newLogin = await request(second, createSession(), "/login", { method: "POST", body: { nickname: "TestAdmin", password: newPassword } });
   assert.equal(newLogin.status, 200, JSON.stringify(newLogin.body));
 });
+
+
+test("notifications track unread state and member limits are enforced", async (t) => {
+  const server = await startServer();
+  t.after(async () => { await server.stop(); fs.rmSync(server.dataDir, { recursive: true, force: true }); });
+  const owner = await register(server, "通知负责人", ["m1"]);
+  const member1 = await register(server, "通知成员一", ["m1"]);
+  const member2 = await register(server, "通知成员二", ["m1"]);
+  const created = await request(server, owner.session, "/topics", {
+    method: "POST",
+    body: { title: "通知与人数上限测试", desc: "测试", vibe: "正常", directions: ["m1"], required: ["m1"], neededRoles: ["技术成员"], type: "public", limit: 2 }
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const topicId = created.body.topic.id;
+
+  const apply1 = await request(server, member1.session, "/topics/" + topicId + "/applications", { method: "POST", body: { message: "申请一" } });
+  assert.equal(apply1.status, 200);
+  let notices = await request(server, owner.session, "/notifications");
+  assert.ok(notices.body.unread >= 1);
+  const marked = await request(server, owner.session, "/notifications/read", { method: "POST", body: { all: true } });
+  assert.equal(marked.status, 200);
+  assert.equal(marked.body.unread, 0);
+
+  const approve = await request(server, owner.session, "/applications/" + apply1.body.application.id + "/approve", { method: "POST", body: {} });
+  assert.equal(approve.status, 200, JSON.stringify(approve.body));
+  notices = await request(server, member1.session, "/notifications");
+  assert.ok(notices.body.unread >= 1);
+
+  const fullApply = await request(server, member2.session, "/topics/" + topicId + "/applications", { method: "POST", body: { message: "申请二" } });
+  assert.equal(fullApply.status, 400);
+  assert.match(fullApply.body.error, /满员/);
+});
