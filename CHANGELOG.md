@@ -33,7 +33,13 @@
 - 时间工具模块和跨时区测试。
 - AI 评测样本、模拟 provider 集成测试。
 
+### Added
+
+- GitHub Actions 自动测试流程。
+
 ### Security
+
+- DeepSeek/OpenAI 请求启用 JSON object 结构化输出。
 
 - CSRF 改为 HMAC 签名 Token。
 - PostgreSQL 增加共享限流表和跨实例限流。

@@ -110,7 +110,7 @@ async function callLLM(system, user, maxTokens) {
     if (activeConfig.apiStyle === "responses") {
       /* OpenAI 官方推荐的 Responses API */
       url = activeConfig.baseUrl + "/responses";
-      body = { model: activeConfig.model, instructions: system, input: user, max_output_tokens: maxTokens || 1600 };
+      body = { model: activeConfig.model, instructions: system, input: user, max_output_tokens: maxTokens || 1600, text: { format: { type: "json_object" } } };
     } else {
       /* 其他 OpenAI 兼容服务统一走 chat/completions */
       url = activeConfig.baseUrl.replace(/\/v1$/, "") + "/v1/chat/completions";
@@ -121,6 +121,9 @@ async function callLLM(system, user, maxTokens) {
         max_tokens: maxTokens || 1600,
         stream: false
       };
+      if ((activeConfig.provider === "deepseek" || activeConfig.provider === "openai") && process.env.AI_DISABLE_JSON_MODE !== "1") {
+        body.response_format = { type: "json_object" };
+      }
     }
     const res = await fetch(url, { method: "POST", headers: headers, signal: controller.signal, body: JSON.stringify(body) });
     if (!res.ok) {

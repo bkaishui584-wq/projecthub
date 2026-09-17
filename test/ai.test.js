@@ -70,3 +70,21 @@ test("AI fallback remains usable without an external provider", async () => {
     AI.__resetConfigForTest();
   }
 });
+
+
+test("DeepSeek-compatible calls request JSON object output", async () => {
+  const originalFetch = global.fetch;
+  let requestBody = null;
+  global.fetch = async (url, options) => {
+    requestBody = JSON.parse(options.body);
+    return responseFor(JSON.stringify({ draft: "一、项目定位：校园垃圾分类识别。二、问题：分类效率低。三、功能：拍照识别、结果展示、统计。四、技术：Python、OpenCV、YOLO。五、分工：张三负责模型，李四负责数据。六、里程碑：两周完成原型。七、风险：样本不足。八、待确认：部署设备。" }));
+  };
+  AI.__setActiveConfigForTest({ provider: "deepseek", label: "DeepSeek", baseUrl: "https://mock.local", apiKey: "x", model: "deepseek-chat", apiStyle: "chat", search: false });
+  try {
+    await AI.generateDraft(topic, messages);
+    assert.equal(requestBody.response_format.type, "json_object");
+  } finally {
+    global.fetch = originalFetch;
+    AI.__resetConfigForTest();
+  }
+});
