@@ -9,9 +9,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="stylesheet" href="styles.css?v=20260917-theme-bg">
+<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css?v=7.3.1">
+<link rel="stylesheet" href="styles.css?v=20260918-t01-t29u">
+<link rel="stylesheet" href="css/music.css?v=4">
+<link rel="stylesheet" href="agent.css?v=1">
 </head>
 <body>
+<canvas id="dynamic-bg-canvas" aria-hidden="true"></canvas>
 <div id="app">
   <header class="topbar">
     <a class="brand" href="#top">
@@ -34,20 +38,21 @@
     </a>
 
     <div class="topbar-search">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <i class="fa-solid fa-magnifying-glass ui-icon ui-icon-search" aria-hidden="true"></i>
       <input id="search-input" type="search" placeholder="搜索项目、专业方向、关键词" autocomplete="off">
     </div>
 
     <div class="topbar-actions">
-      <button id="btn-bell" class="icon-btn" type="button" title="消息提醒" hidden>🔔<span id="bell-badge" class="badge-dot" hidden>0</span></button>
-      <button id="btn-inbox" class="icon-btn" type="button" title="入组申请" hidden>✉<span id="inbox-badge" class="badge-dot" hidden>0</span></button>
+      <button id="btn-announcements" class="icon-btn" type="button" title="全站公告" hidden><i class="fa-solid fa-bullhorn ui-icon" aria-hidden="true"></i><span id="announcement-badge" class="badge-dot" hidden>0</span></button>
+      <button id="btn-bell" class="icon-btn" type="button" title="消息提醒" hidden><i class="fa-solid fa-bell ui-icon" aria-hidden="true"></i><span id="bell-badge" class="badge-dot" hidden>0</span></button>
+      <button id="btn-inbox" class="icon-btn" type="button" title="入组申请" hidden><i class="fa-solid fa-envelope ui-icon" aria-hidden="true"></i><span id="inbox-badge" class="badge-dot" hidden>0</span></button>
       <button id="btn-admin" class="btn btn-ghost btn-small" type="button" hidden>管理</button>
       <span id="user-chip" class="user-chip"></span>
       <button id="btn-auth" class="btn btn-primary btn-small" type="button">登录 / 注册</button>
       <button id="btn-switch" class="btn btn-ghost btn-small" type="button">切换身份</button>
       <button id="btn-theme" class="btn btn-ghost btn-small" type="button">主题</button>
       <button id="btn-logout" class="btn btn-quiet btn-small" type="button" hidden>退出</button>
-      <button id="btn-create" class="btn btn-primary btn-small" type="button">发布项目</button>
+      <button id="btn-create" class="btn btn-primary btn-small" type="button">创建项目</button>
     </div>
   </header>
 
@@ -55,9 +60,13 @@
     <!-- Plaza view -->
     <section id="view-plaza" class="view">
       <div class="plaza-hero container">
-        <p class="plaza-eyebrow">大学生线上项目协作社区</p>
-        <h1>不出门不见面，也能一起做项目</h1>
-        <p class="plaza-sub">按专业方向找到队友，创建公开或私密话题，进群直接聊想法。</p>
+        <p class="plaza-eyebrow">大学生项目协作与科研智能平台</p>
+        <h1>让一个想法，变成一个项目</h1>
+        <p class="plaza-sub">找到队友、明确方向、拆解任务，把一次讨论推进成可执行的项目。</p>
+        <div class="plaza-cta">
+          <button id="hero-create" class="btn btn-primary" type="button">创建项目</button>
+          <button id="hero-explore" class="btn btn-ghost" type="button">探索项目</button>
+        </div>
         <div class="plaza-stats">
           <span><strong id="stat-topics">0</strong> 个话题</span>
           <span><strong id="stat-members">0</strong> 位同学</span>
@@ -67,6 +76,28 @@
       <div class="container plaza-body">
         <div class="plaza-toolbar">
           <div id="filter-bar" class="filter-bar" aria-label="按方向筛选"></div>
+          <div class="project-filter-controls">
+            <select id="category-filter" class="select select-small" aria-label="按项目分类筛选">
+              <option value="all">全部分类</option>
+              <option value="ai">人工智能</option>
+              <option value="robot">机器人</option>
+              <option value="vision">计算机视觉</option>
+              <option value="software">软件</option>
+              <option value="hardware">硬件</option>
+              <option value="aerospace">航天</option>
+              <option value="other">其他</option>
+            </select>
+            <select id="status-filter" class="select select-small" aria-label="按项目状态筛选">
+              <option value="all">全部状态</option>
+              <option value="recruiting">招募中</option>
+              <option value="formed">筹备中</option>
+              <option value="active">进行中</option>
+              <option value="paused">暂停</option>
+              <option value="completed">已完成</option>
+              <option value="archived">已归档</option>
+            </select>
+            <button id="recruiting-filter" class="filter-chip" type="button">只看招募中</button>
+          </div>
           <span id="result-count" class="result-count"></span>
         </div>
         <div id="topic-grid" class="topic-grid"></div>
@@ -86,17 +117,17 @@
           <div class="chat-head-main">
             <h2 id="chat-title"></h2>
             <p id="chat-meta" class="chat-meta"></p>
+            <p id="chat-project-status" class="chat-project-status"></p>
+            <p id="chat-description" class="chat-project-status"></p>
           </div>
           <div class="chat-head-actions">
-            <button id="btn-ai-panel" class="btn btn-ghost btn-small" type="button" hidden>AI 助手</button>
+            <button id="btn-outcome" class="btn btn-ghost btn-small" type="button" hidden>项目成果</button>
             <button id="btn-report" class="btn btn-quiet btn-small" type="button">举报</button>
             <button id="btn-side" class="btn btn-ghost btn-small" type="button">成员 / 文件</button>
             <button id="btn-delete-topic" class="btn btn-danger btn-small" type="button" hidden>删除项目</button>
           </div>
         </header>
 
-        <div id="chat-announcement" class="chat-announcement" hidden></div>
-        <div id="chat-ai" class="chat-ai" hidden></div>
 
         <div class="chat-body">
           <div id="chat-messages" class="chat-messages"></div>
@@ -108,12 +139,22 @@
             <p id="chat-vibe" class="chat-vibe"></p>
             <p id="chat-code" class="chat-code mono" hidden></p>
             <p id="chat-roles" class="chat-roles" hidden></p>
-            <h3 class="side-title">组内文件</h3>
-            <div id="file-upload-wrap" class="file-upload">
-              <label class="btn btn-ghost btn-small file-label" for="file-input">上传 Word / 图片</label>
-              <input id="file-input" type="file" accept=".doc,.docx,.jpg,.jpeg,.png" hidden>
-              <p class="file-hint">支持 .doc / .docx / .jpg / .png，单个不超过 5MB</p>
+            <div class="task-section">
+              <div class="task-section-head"><h3 class="side-title">项目任务 <span id="task-count"></span></h3><button id="task-create" class="btn btn-primary btn-small" type="button" hidden>新建任务</button></div>
+              <ul id="task-list" class="task-list"></ul>
             </div>
+            <div id="owner-controls" class="owner-controls" hidden></div>
+            <h3 class="side-title">项目时间线</h3>
+            <ul id="activity-list" class="activity-list"></ul>
+            <h3 class="side-title">项目知识库</h3>
+            <div id="file-upload-wrap" class="file-upload">
+              <label class="btn btn-ghost btn-small file-label" for="file-input">上传资料</label>
+              <input id="file-input" type="file" accept=".doc,.docx,.pdf,.jpg,.jpeg,.png" hidden>
+              <button id="resource-note" class="btn btn-ghost btn-small" type="button">添加笔记</button>
+              <button id="resource-link" class="btn btn-ghost btn-small" type="button">添加链接</button>
+              <p class="file-hint">支持 Word / PDF / jpg / png，单个不超过 5MB</p>
+            </div>
+            <ul id="resource-list" class="resource-list"></ul>
             <ul id="file-list" class="file-list"></ul>
           </aside>
         </div>
@@ -121,7 +162,7 @@
         <form id="chat-form" class="chat-form" autocomplete="off">
           <div id="reply-bar" class="reply-bar" hidden></div>
           <div class="composer">
-            <button id="btn-mention" class="icon-btn" type="button" title="提醒成员">@</button>
+            <button id="btn-mention" class="icon-btn" type="button" title="提醒成员"><i class="fa-solid fa-comment-dots ui-icon" aria-hidden="true"></i></button>
             <input id="chat-input" type="text" placeholder="输入你的想法，回车发送" aria-label="消息内容">
             <button type="submit" class="btn btn-primary">发送</button>
           </div>
@@ -133,16 +174,44 @@
   </main>
 </div>
 
+<footer class="legal-footer">
+  <a href="terms.html" target="_blank" rel="noopener">用户协议</a>
+  <a href="privacy.html" target="_blank" rel="noopener">隐私政策</a>
+</footer>
+
 <div id="modal-overlay" class="modal-overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-label="对话框">
-    <button id="modal-close" class="modal-close" type="button" aria-label="关闭">×</button>
+    <button id="modal-close" class="modal-close" type="button" aria-label="关闭"><i class="fa-solid fa-xmark modal-close-icon" aria-hidden="true"></i></button>
     <div id="modal-content"></div>
   </div>
+</div>
+
+
+<div id="music-player" class="music-player is-collapsed" aria-label="网站音乐播放器">
+  <button id="music-toggle" class="music-toggle" type="button" title="网站音乐" aria-expanded="false"><i class="fa-solid fa-music" aria-hidden="true"></i></button>
+  <div class="music-panel" hidden>
+    <div class="music-head"><span>网站音乐</span><button class="music-close" type="button" data-music-close aria-label="收起播放器"><i class="fa-solid fa-xmark"></i></button></div>
+    <p id="music-track" class="music-track">暂无音乐</p>
+    <div class="music-progress-row"><span id="music-current">0:00</span><input id="music-progress" type="range" min="0" max="100" step="0.1" value="0" aria-label="播放进度"><span id="music-duration">0:00</span></div>
+    <div class="music-controls">
+      <button type="button" data-music-prev aria-label="上一首"><i class="fa-solid fa-backward-step"></i></button>
+      <button type="button" data-music-play aria-label="播放"><i class="fa-solid fa-play"></i></button>
+      <button type="button" data-music-next aria-label="下一首"><i class="fa-solid fa-forward-step"></i></button>
+    </div>
+    <div class="music-options"><input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.48" aria-label="音量"><button type="button" data-music-loop aria-label="循环模式"><i class="fa-solid fa-repeat"></i></button><button type="button" data-music-random aria-label="随机播放"><i class="fa-solid fa-shuffle"></i></button></div>
+  </div>
+</div>
+
+<div id="projecthub-pet" class="projecthub-pet" data-state="idle" role="button" tabindex="0" aria-label="ProjectHub 桌宠，可拖动，点击可以互动">
+  <span class="pet-bubble" aria-live="polite" hidden></span>
+  <img src="assets/pet/pet.svg" alt="" aria-hidden="true" width="710" height="600" decoding="async" draggable="false">
 </div>
 
 <div id="toast" class="toast" hidden></div>
 
 <script src="time-utils.js" defer></script>
-<script src="script.js" defer></script>
+<script src="script.js?v=20260924-admin-api" defer></script>
+<script src="agent.js?v=5"></script>
+<script src="js/music.js?v=3" defer></script>
 </body>
 </html>

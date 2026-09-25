@@ -1,39 +1,45 @@
 (function () {
   "use strict";
 
+
   /* ================= 常量 ================= */
   const MAJORS = [
-    { id: "m1", label: "计算机科学与技术", icon: "💻" },
-    { id: "m2", label: "软件工程", icon: "🧩" },
-    { id: "m3", label: "人工智能", icon: "🤖" },
-    { id: "m4", label: "数据科学与大数据技术", icon: "📊" },
-    { id: "m5", label: "电子信息工程", icon: "📡" },
-    { id: "m6", label: "通信工程", icon: "📶" },
-    { id: "m7", label: "自动化", icon: "⚙️" },
-    { id: "m8", label: "机器人工程", icon: "🦾" },
-    { id: "m9", label: "机械设计制造及其自动化", icon: "🔩" },
-    { id: "m10", label: "电气工程及其自动化", icon: "⚡" },
-    { id: "m11", label: "数学与应用数学", icon: "📐" },
-    { id: "m12", label: "信息与计算科学", icon: "🔢" },
-    { id: "m13", label: "物理学", icon: "🔭" },
-    { id: "m14", label: "化学", icon: "🧪" },
-    { id: "m15", label: "环境工程", icon: "🌱" },
-    { id: "m16", label: "生物医学工程", icon: "🧬" },
-    { id: "m17", label: "材料科学与工程", icon: "🧱" },
-    { id: "m18", label: "建筑学 / 土木工程", icon: "🏗️" },
-    { id: "m19", label: "经济学 / 金融学", icon: "💰" },
-    { id: "m20", label: "管理科学", icon: "📋" },
-    { id: "m21", label: "新闻传播学", icon: "📰" },
-    { id: "m22", label: "设计学 / 视觉传达", icon: "🎨" },
-    { id: "m23", label: "医学 / 药学", icon: "🩺" },
-    { id: "m24", label: "心理学", icon: "🧠" },
-    { id: "m25", label: "教育学", icon: "📚" },
-    { id: "m26", label: "法学", icon: "⚖️" },
-    { id: "m27", label: "能源与动力工程", icon: "🔋" },
-    { id: "m28", label: "航空航天工程", icon: "✈️" }
+    { id: "m1", label: "计算机科学与技术", icon: "laptop" },
+    { id: "m2", label: "软件工程", icon: "puzzle-piece" },
+    { id: "m3", label: "人工智能", icon: "robot" },
+    { id: "m4", label: "数据科学与大数据技术", icon: "bar-chart" },
+    { id: "m5", label: "电子信息工程", icon: "satellite-antenna" },
+    { id: "m6", label: "通信工程", icon: "antenna-bars" },
+    { id: "m7", label: "自动化", icon: "gear" },
+    { id: "m8", label: "机器人工程", icon: "mechanical-arm" },
+    { id: "m9", label: "机械设计制造及其自动化", icon: "nut-and-bolt" },
+    { id: "m10", label: "电气工程及其自动化", icon: "high-voltage" },
+    { id: "m11", label: "数学与应用数学", icon: "triangular-ruler" },
+    { id: "m12", label: "信息与计算科学", icon: "input-numbers" },
+    { id: "m13", label: "物理学", icon: "telescope" },
+    { id: "m14", label: "化学", icon: "test-tube" },
+    { id: "m15", label: "环境工程", icon: "seedling" },
+    { id: "m16", label: "生物医学工程", icon: "dna" },
+    { id: "m17", label: "材料科学与工程", icon: "brick" },
+    { id: "m18", label: "建筑学 / 土木工程", icon: "building-construction" },
+    { id: "m19", label: "经济学 / 金融学", icon: "money-bag" },
+    { id: "m20", label: "管理科学", icon: "clipboard" },
+    { id: "m21", label: "新闻传播学", icon: "newspaper" },
+    { id: "m22", label: "设计学 / 视觉传达", icon: "artist-palette" },
+    { id: "m23", label: "医学 / 药学", icon: "stethoscope" },
+    { id: "m24", label: "心理学", icon: "brain" },
+    { id: "m25", label: "教育学", icon: "books" },
+    { id: "m26", label: "法学", icon: "balance-scale" },
+    { id: "m27", label: "能源与动力工程", icon: "battery" },
+    { id: "m28", label: "航空航天工程", icon: "airplane" }
   ];
   const ROLE_TAGS = ["项目策划", "技术成员", "设计成员", "文案/材料成员", "调研成员", "答辩成员"];
   const GRADES = ["大一", "大二", "大三", "大四", "研一", "研二", "研三"];
+  const PROJECT_STATUS_LABELS = { recruiting: "招集中", formed: "已组建", active: "进行中", paused: "已暂停", completed: "已完成", archived: "已归档" };
+  const PROJECT_STATUS_NEXT = { recruiting: ["formed", "archived"], formed: ["active", "paused", "archived"], active: ["paused", "completed", "archived"], paused: ["active", "completed", "archived"], completed: ["archived"], archived: [] };
+  const TASK_STATUS_LABELS = { todo: "待开始", in_progress: "进行中", completed: "已完成", overdue: "已逾期" };
+  const TASK_PRIORITY_LABELS = { low: "低", medium: "中", high: "高" };
+  const ANNOUNCEMENT_STATUS_LABELS = { draft: "草稿", published: "已发布", withdrawn: "已撤回", archived: "已归档" };
   /* ================= 主题配置 ================= */
   const THEMES = {
     starry: {
@@ -69,9 +75,18 @@
       name: "星龙·秘境",
       description: "星龙 · 神秘 · 史诗",
       preview: "images/styles/dragon.jpg"
+    },
+
+    qingli: {
+      id: "qingli",
+      name: "青璃·映界",
+      description: "清透青绿与柔和暖光交织，营造安静、梦幻而轻盈的项目空间。",
+      preview: "images/styles/qingli.webp"
     }
   };
   const THEME_STORAGE_KEY = "projecthub_theme_v1";
+  const BACKGROUND_KEY = "projecthub_background_v1";
+  const DYNAMIC_INTENSITY_KEY = "projecthub_dynamic_intensity_v1";
   const DEFAULT_THEME_ID = "starry";
   function initializeTheme() {
     let savedTheme = null;
@@ -113,20 +128,47 @@
   return false;
 }
   
-  function applyTheme(themeId) {
-  // 检查传入的主题是否存在
+ function applyTheme(themeId) {
+  // 根据主题 ID 查找主题
   const theme = THEMES[themeId];
 
   if (!theme) {
     console.warn("未知主题：", themeId);
-    return;
+    return false;
   }
 
-  // 把当前主题写到 <html> 标签上
+  // 保存当前主题状态
+  state.theme = theme.id;
+
+  // 把主题写到 <html> 标签
   document.documentElement.dataset.theme = theme.id;
+
+  return true;
 }
-  const majorLabel = (id) => { const m = MAJORS.find((x) => x.id === id); return m ? (m.icon + " " + m.label) : id; };
+  const majorIcon = (id) => { const m = MAJORS.find((x) => x.id === id); return m ? m.icon : ""; };
+  const majorLabel = (id) => majorName(id);
   const majorName = (id) => { const m = MAJORS.find((x) => x.id === id); return m ? m.label : id; };
+  const PROJECT_CATEGORY_LABELS = {
+    ai: "人工智能", robot: "机器人", vision: "计算机视觉",
+    software: "软件", hardware: "硬件", aerospace: "航天", other: "其他"
+  };
+
+  function projectSearchText(t) {
+    return [t.title, t.desc, t.vibe, topicDirections(t).map(majorName).join(" "), (t.neededRoles || []).join(" "), requiredLabels(t), t.type, t.members && t.members[0] && t.members[0].nickname]
+      .filter(Boolean).join(" ").toLowerCase();
+  }
+
+  function projectCategory(t) {
+    const dirs = topicDirections(t);
+    const text = projectSearchText(t);
+    if (dirs.indexOf("m28") >= 0 || /航天|航空|无人机|卫星|space|aerospace/.test(text)) return "aerospace";
+    if (dirs.indexOf("m7") >= 0 || dirs.indexOf("m8") >= 0 || /机器人|ros|slam|机械臂|自动驾驶/.test(text)) return "robot";
+    if (/计算机视觉|目标检测|图像|视觉|yolo|opencv|cnn|识别/.test(text)) return "vision";
+    if (["m5", "m6", "m9", "m10", "m27"].some((id) => dirs.indexOf(id) >= 0) || /硬件|嵌入式|单片机|传感器|arduino|stm32|esp32|电路/.test(text)) return "hardware";
+    if (dirs.indexOf("m3") >= 0 || dirs.indexOf("m4") >= 0 || /人工智能|机器学习|深度学习|大模型|nlp|算法/.test(text)) return "ai";
+    if (dirs.indexOf("m1") >= 0 || dirs.indexOf("m2") >= 0 || /软件|前端|后端|小程序|网页|python|java|c\+\+|数据库/.test(text)) return "software";
+    return "other";
+  }
   const gradeOptions = (selected) => GRADES.map((g) => '<option value="' + g + '"' + (g === selected ? " selected" : "") + '>' + g + '</option>').join("");
   const tagOptions = (selected) => '<option value="">未分配</option>' + ROLE_TAGS.map((t) => '<option value="' + t + '"' + (t === selected ? " selected" : "") + '>' + t + '</option>').join("");
 
@@ -137,6 +179,8 @@
   /* ================= 状态与本地存储 ================= */
   const USER_KEY = "projecthub_session_v3";
   const OUTBOX_KEY = "projecthub_outbox_v1";
+  const THEME_KEY = "projecthub_theme_v1";
+
   let state = {
     user: null,
     token: "",
@@ -145,16 +189,63 @@
     files: {},
     myApplications: [],
     inbox: [],
-    ai: {},
     notifications: [],
     unread: 0,
+    announcements: [],
+    announcementsUnread: 0,
+    appeals: [],
     outbox: [],
     replyTo: null,
     filter: "all",
+    categoryFilter: "all",
+    statusFilter: "all",
+    recruitingOnly: false,
     search: "",
-    online: false
+    online: false,
+    theme: "starry"
   };
   let currentTopicId = null;
+  let petController = null;
+  let lastPetUnread = 0;
+
+  function loadThemePreference() {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+
+      if (saved && THEMES[saved]) {
+        applyTheme(saved);
+      } else {
+        applyTheme("starry");
+      }
+    } catch (e) {
+      applyTheme("starry");
+    }
+  }
+  function saveThemePreference() {
+    try {
+      const theme = THEMES[state.theme];
+
+      if (!theme) {
+        console.warn("无法保存未知主题：", state.theme);
+        return false;
+      }
+
+      localStorage.setItem(THEME_KEY, theme.id);
+      return true;
+    } catch (e) {
+      console.warn("保存主题失败：", e);
+      return false;
+    }
+  }
+
+  function hasThemePreference() {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      return !!(saved && THEMES[saved]);
+    } catch (e) {
+      return false;
+    }
+  }
 
   function loadSession() {
     state.outbox = loadOutbox();
@@ -185,8 +276,446 @@
     try { localStorage.removeItem(USER_KEY); localStorage.removeItem(OUTBOX_KEY); } catch (e) {}
   }
 
+  /* ================= 动态背景 ================= */
+
+  const StarryRenderer = {
+  ctx: null,
+  width: 0,
+  height: 0,
+  particles: [],
+  orbs: [],
+  fireflies: [],
+  pulses: [],
+  comets: [],
+  particleCount: 72,
+  lastCometAt: 0,
+  lastPulseAt: 0,
+  intensity: "standard",
+
+  color(c, alpha) {
+    return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+  },
+
+  palette() {
+    const theme = document.documentElement.dataset.theme || "starry";
+    const palettes = {
+      starry: { bg1: [5, 14, 39], bg2: [28, 16, 66], blue: [86, 142, 255], violet: [170, 100, 255], cyan: [75, 229, 210], rose: [255, 126, 184], gold: [255, 194, 112], core: [235, 243, 255], line: [112, 153, 255], light: false },
+      deepsea: { bg1: [4, 24, 47], bg2: [7, 60, 83], blue: [54, 166, 235], violet: [115, 126, 255], cyan: [73, 230, 224], rose: [255, 139, 178], gold: [255, 210, 122], core: [205, 250, 255], line: [80, 198, 240], light: false },
+      sky: { bg1: [220, 244, 255], bg2: [255, 237, 252], blue: [52, 143, 235], violet: [132, 121, 235], cyan: [63, 205, 210], rose: [236, 126, 181], gold: [242, 176, 88], core: [255, 255, 255], line: [70, 150, 230], light: true },
+      flower: { bg1: [255, 245, 252], bg2: [242, 231, 255], blue: [130, 151, 235], violet: [185, 105, 220], cyan: [117, 210, 193], rose: [235, 126, 187], gold: [236, 174, 101], core: [255, 250, 255], line: [190, 120, 220], light: true },
+      dragon: { bg1: [10, 7, 28], bg2: [53, 17, 78], blue: [96, 141, 255], violet: [177, 95, 255], cyan: [86, 224, 210], rose: [255, 116, 190], gold: [255, 190, 101], core: [255, 231, 255], line: [177, 105, 255], light: false },
+      qingli: { bg1: [246, 241, 231], bg2: [220, 237, 234], blue: [110, 170, 166], violet: [155, 199, 195], cyan: [155, 199, 195], rose: [217, 189, 138], gold: [217, 189, 138], core: [255, 253, 248], line: [110, 170, 166], light: true }
+    };
+    return palettes[theme] || palettes.starry;
+  },
+
+  init(ctx, width, height, intensity) {
+    this.ctx = ctx;
+    this.width = width;
+    this.height = height;
+    this.intensity = intensity || "standard";
+    this.lastCometAt = 0;
+    this.lastPulseAt = 0;
+    this.updateParticleCount();
+    this.createParticles();
+    this.createOrbs();
+    this.createFireflies();
+  },
+
+  updateParticleCount() {
+    const mobile = window.matchMedia("(max-width: 640px)").matches;
+    if (mobile) {
+      this.particleCount = this.intensity === "soft" ? 24 : (this.intensity === "immersive" ? 72 : 44);
+      return;
+    }
+    this.particleCount = this.intensity === "soft" ? 44 : (this.intensity === "immersive" ? 132 : 78);
+  },
+
+  createParticles() {
+    const palette = this.palette();
+    this.particles = [];
+    for (let i = 0; i < this.particleCount; i += 1) {
+      const depth = Math.random() * 0.82 + 0.18;
+      const tint = [palette.core, palette.cyan, palette.violet, palette.rose][i % 4];
+      this.particles.push({
+        x: Math.random() * this.width,
+        y: Math.random() * this.height,
+        r: (Math.random() * 1.8 + 0.42) * depth * (palette.light ? 1.22 : 1),
+        vx: (Math.random() - 0.5) * (palette.light ? 0.14 : 0.11) * depth,
+        vy: (Math.random() - 0.5) * (palette.light ? 0.14 : 0.11) * depth,
+        baseAlpha: Math.random() * (palette.light ? 0.6 : 0.5) + (palette.light ? 0.28 : 0.2),
+        alpha: Math.random() * 0.58 + 0.2,
+        phase: Math.random() * Math.PI * 2,
+        tint,
+        depth
+      });
+    }
+    this.pulses = [];
+    this.comets = [];
+  },
+
+  createOrbs() {
+    const palette = this.palette();
+    const count = this.intensity === "soft" ? 4 : (this.intensity === "immersive" ? 13 : 9);
+    const colors = [palette.blue, palette.violet, palette.cyan, palette.rose, palette.gold];
+    this.orbs = [];
+    for (let i = 0; i < count; i += 1) {
+      this.orbs.push({
+        x: Math.random() * this.width,
+        y: Math.random() * this.height,
+        r: Math.random() * Math.min(this.width, this.height) * (palette.light ? 0.27 : 0.22) + (palette.light ? 110 : 90),
+        vx: (Math.random() - 0.5) * (palette.light ? 0.22 : 0.15),
+        vy: (Math.random() - 0.5) * (palette.light ? 0.22 : 0.15),
+        alpha: Math.random() * (palette.light ? 0.08 : 0.055) + (palette.light ? 0.045 : 0.03),
+        color: colors[i % colors.length]
+      });
+    }
+  },
+
+  createFireflies() {
+    const palette = this.palette();
+    const count = this.intensity === "soft" ? 28 : (this.intensity === "immersive" ? 96 : 56);
+    const colors = [palette.cyan, palette.violet, palette.blue, palette.gold, palette.rose];
+    this.fireflies = [];
+    for (let i = 0; i < count; i += 1) {
+      this.fireflies.push({
+        x: Math.random() * this.width,
+        y: Math.random() * this.height,
+        r: Math.random() * 2.2 + 1.1,
+        vx: (Math.random() - 0.5) * 0.16,
+        vy: -(Math.random() * 0.16 + 0.02),
+        phase: Math.random() * Math.PI * 2,
+        alpha: Math.random() * (palette.light ? 0.36 : 0.42) + 0.16,
+        color: colors[i % colors.length]
+      });
+    }
+  },
+
+  resize(width, height) {
+    this.width = width;
+    this.height = height;
+    this.createParticles();
+    this.createOrbs();
+    this.createFireflies();
+  },
+
+  setIntensity(intensity) {
+    this.intensity = intensity || "standard";
+    this.updateParticleCount();
+    this.createParticles();
+    this.createOrbs();
+    this.createFireflies();
+  },
+
+  update(timestamp) {
+    const time = timestamp || 0;
+    const palette = this.palette();
+    for (const p of this.particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      const twinkle = Math.sin(time * 0.0015 + p.phase);
+      p.alpha = Math.max(0.07, Math.min(1, p.baseAlpha + twinkle * 0.19));
+      if (p.x < -10) p.x = this.width + 10; else if (p.x > this.width + 10) p.x = -10;
+      if (p.y < -10) p.y = this.height + 10; else if (p.y > this.height + 10) p.y = -10;
+    }
+    for (const o of this.orbs) {
+      o.x += o.vx; o.y += o.vy;
+      if (o.x < -o.r) o.x = this.width + o.r; else if (o.x > this.width + o.r) o.x = -o.r;
+      if (o.y < -o.r) o.y = this.height + o.r; else if (o.y > this.height + o.r) o.y = -o.r;
+    }
+    for (const f of this.fireflies) {
+      f.x += f.vx + Math.sin(time * 0.001 + f.phase) * 0.06;
+      f.y += f.vy;
+      if (f.y < -18) { f.y = this.height + 18; f.x = Math.random() * this.width; }
+      if (f.x < -18) f.x = this.width + 18; else if (f.x > this.width + 18) f.x = -18;
+    }
+    if (!this.lastPulseAt) this.lastPulseAt = time;
+    else if (time - this.lastPulseAt > (palette.light ? 1900 : 3000) + Math.random() * 1600) {
+      this.lastPulseAt = time;
+      this.pulses.push({ x: Math.random() * this.width, y: Math.random() * this.height, r: 8, speed: 0.8 + Math.random() * 1.5, life: 1, color: palette.line });
+    }
+    if (!this.lastCometAt) this.lastCometAt = time;
+    else if (time - this.lastCometAt > (palette.light ? 3000 : 4200) + Math.random() * 2600) {
+      this.lastCometAt = time;
+      this.comets.push({ x: this.width * (0.4 + Math.random() * 0.65), y: this.height * (0.04 + Math.random() * 0.35), vx: -(3 + Math.random() * 2.5), vy: 0.9 + Math.random() * 0.9, life: 0, color: palette.core });
+    }
+    for (const p of this.pulses) { p.r += p.speed; p.life -= 0.012; }
+    this.pulses = this.pulses.filter((p) => p.life > 0);
+    for (const c of this.comets) { c.life += 0.013; c.x += c.vx; c.y += c.vy; }
+    this.comets = this.comets.filter((c) => c.life < 1);
+  },
+
+  render() {
+    if (!this.ctx) return;
+    const palette = this.palette();
+    const now = performance.now();
+    const px = (typeof pointer !== "undefined" ? pointer.x : 0) * 22;
+    const py = (typeof pointer !== "undefined" ? pointer.y : 0) * 16;
+    this.ctx.clearRect(0, 0, this.width, this.height);
+
+    const bg = this.ctx.createLinearGradient(0, 0, this.width, this.height);
+    bg.addColorStop(0, this.color(palette.bg1, palette.light ? 0.15 : 0.24));
+    bg.addColorStop(1, this.color(palette.bg2, palette.light ? 0.1 : 0.18));
+    this.ctx.fillStyle = bg;
+    this.ctx.fillRect(0, 0, this.width, this.height);
+
+    for (const o of this.orbs) {
+      const x = o.x + px * o.r / 500, y = o.y + py * o.r / 500;
+      const g = this.ctx.createRadialGradient(x, y, 0, x, y, o.r);
+      g.addColorStop(0, this.color(o.color, o.alpha));
+      g.addColorStop(0.46, this.color(o.color, o.alpha * 0.26));
+      g.addColorStop(1, this.color(o.color, 0));
+      this.ctx.fillStyle = g; this.ctx.beginPath(); this.ctx.arc(x, y, o.r, 0, Math.PI * 2); this.ctx.fill();
+    }
+
+    for (let i = 0; i < 5; i += 1) {
+      const y = this.height * (0.1 + i * 0.18) + Math.sin(now * 0.00035 + i) * 30 + py;
+      const g = this.ctx.createLinearGradient(-100, y, this.width + 100, y + 90);
+      const c1 = i % 3 === 0 ? palette.cyan : (i % 3 === 1 ? palette.violet : palette.blue);
+      const c2 = i % 2 === 0 ? palette.rose : palette.cyan;
+      g.addColorStop(0, this.color(c1, 0)); g.addColorStop(0.3, this.color(c2, palette.light ? 0.035 : 0.075));
+      g.addColorStop(0.62, this.color(c1, palette.light ? 0.055 : 0.11)); g.addColorStop(1, this.color(c2, 0));
+      this.ctx.strokeStyle = g; this.ctx.lineWidth = 24 + i * 8; this.ctx.lineCap = 'round';
+      this.ctx.beginPath(); this.ctx.moveTo(-80 + px, y);
+      this.ctx.bezierCurveTo(this.width * 0.2, y - 100, this.width * 0.58, y + 130, this.width + 80 + px, y - 35);
+      this.ctx.stroke();
+    }
+
+    this.ctx.save();
+    this.ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i += 1) {
+      this.ctx.save();
+      this.ctx.translate(this.width * 0.5 + px * 0.25, this.height * 0.5 + py * 0.25);
+      this.ctx.rotate(now * (i % 2 ? -0.00008 : 0.0001) + i);
+      this.ctx.scale(1, 1 - (0.18 + i * 0.08));
+      this.ctx.strokeStyle = this.color(i === 0 ? palette.line : (i === 1 ? palette.violet : palette.cyan), palette.light ? 0.09 : 0.075);
+      this.ctx.lineWidth = i === 0 ? 1.4 : 0.9;
+      this.ctx.setLineDash(i === 0 ? [20, 16, 4, 18] : [9, 18]);
+      this.ctx.beginPath(); this.ctx.arc(0, 0, Math.min(this.width, this.height) * (0.28 + i * 0.15), 0, Math.PI * 2); this.ctx.stroke();
+      this.ctx.restore();
+    }
+    this.ctx.restore();
+
+    const maxDistance = this.width < 640 ? (palette.light ? 92 : 78) : (palette.light ? 142 : 120);
+    for (let i = 0; i < this.particles.length; i += 1) {
+      for (let j = i + 1; j < this.particles.length; j += 1) {
+        const a = this.particles[i], b = this.particles[j];
+        const ax = a.x + px * a.depth, ay = a.y + py * a.depth;
+        const bx = b.x + px * b.depth, by = b.y + py * b.depth;
+        const d = Math.hypot(ax - bx, ay - by);
+        if (d > maxDistance) continue;
+        this.ctx.strokeStyle = this.color(i % 4 === 0 ? palette.violet : palette.line, (1 - d / maxDistance) * (palette.light ? 0.22 : 0.17));
+        this.ctx.lineWidth = palette.light ? 0.95 : 0.7;
+        this.ctx.beginPath(); this.ctx.moveTo(ax, ay); this.ctx.lineTo(bx, by); this.ctx.stroke();
+      }
+    }
+
+    for (const p of this.particles) {
+      const x = p.x + px * p.depth, y = p.y + py * p.depth;
+      const radius = p.r * (palette.light ? 8 : 7);
+      const g = this.ctx.createRadialGradient(x, y, 0, x, y, radius);
+      g.addColorStop(0, this.color(p.tint, p.alpha));
+      g.addColorStop(0.32, this.color(p.tint, p.alpha * 0.28));
+      g.addColorStop(1, this.color(p.tint, 0));
+      this.ctx.fillStyle = g; this.ctx.beginPath(); this.ctx.arc(x, y, radius, 0, Math.PI * 2); this.ctx.fill();
+      this.ctx.fillStyle = this.color(p.tint, p.alpha); this.ctx.beginPath(); this.ctx.arc(x, y, p.r, 0, Math.PI * 2); this.ctx.fill();
+    }
+
+    for (const f of this.fireflies) {
+      const pulse = 0.72 + Math.sin(now * 0.002 + f.phase) * 0.28;
+      const g = this.ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 11);
+      g.addColorStop(0, this.color(f.color, f.alpha * pulse));
+      g.addColorStop(0.26, this.color(f.color, f.alpha * pulse * 0.3));
+      g.addColorStop(1, this.color(f.color, 0));
+      this.ctx.fillStyle = g; this.ctx.beginPath(); this.ctx.arc(f.x, f.y, f.r * 11, 0, Math.PI * 2); this.ctx.fill();
+      this.ctx.fillStyle = this.color(f.color, Math.min(1, f.alpha * pulse * 1.25));
+      this.ctx.beginPath(); this.ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); this.ctx.fill();
+    }
+
+    for (const p of this.pulses) {
+      this.ctx.strokeStyle = this.color(p.color, Math.max(0, p.life) * (palette.light ? 0.3 : 0.24));
+      this.ctx.lineWidth = palette.light ? 1.4 : 1;
+      this.ctx.beginPath(); this.ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); this.ctx.stroke();
+    }
+
+    for (const c of this.comets) {
+      const alpha = Math.sin(Math.min(c.life, 1) * Math.PI) * (palette.light ? 0.78 : 0.9);
+      const tx = c.x - c.vx * 12, ty = c.y - c.vy * 12;
+      const g = this.ctx.createLinearGradient(tx, ty, c.x, c.y);
+      g.addColorStop(0, this.color(c.color, 0)); g.addColorStop(0.68, this.color(c.color, alpha * 0.45)); g.addColorStop(1, this.color(c.color, alpha));
+      this.ctx.strokeStyle = g; this.ctx.lineWidth = palette.light ? 1.8 : 1.5;
+      this.ctx.beginPath(); this.ctx.moveTo(tx, ty); this.ctx.lineTo(c.x, c.y); this.ctx.stroke();
+    }
+  }
+};
+
+const dynamicBackground = {
+  canvas: null,
+  ctx: null,
+
+  running: false,
+  animationId: null,
+
+  mode: "static",
+  intensity: "standard",
+
+  renderer: null,
+
+  init() {
+    this.canvas = document.getElementById("dynamic-bg-canvas");
+
+    if (!this.canvas) {
+      console.warn("未找到动态背景 Canvas");
+      return false;
+    }
+
+    this.ctx = this.canvas.getContext("2d");
+
+    if (!this.ctx) {
+      console.warn("当前浏览器不支持 Canvas 2D");
+      return false;
+    }
+
+    this.resize();
+
+    return true;
+  },
+
+  resize() {
+    if (!this.canvas || !this.ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    this.canvas.width = Math.floor(window.innerWidth * dpr);
+    this.canvas.height = Math.floor(window.innerHeight * dpr);
+
+    this.canvas.style.width = window.innerWidth + "px";
+    this.canvas.style.height = window.innerHeight + "px";
+
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (this.renderer && typeof this.renderer.resize === "function") {
+      this.renderer.resize(
+        window.innerWidth,
+        window.innerHeight
+      );
+    }
+  },
+
+  setMode(mode) {
+    this.mode = mode === "dynamic" ? "dynamic" : "static";
+
+    if (this.mode === "dynamic") {
+      this.start();
+    } else {
+      this.stop();
+      this.clear();
+    }
+  },
+
+  setIntensity(intensity) {
+    const allowed = ["soft", "standard", "immersive"];
+
+    this.intensity = allowed.includes(intensity)
+      ? intensity
+      : "standard";
+
+    if (
+      this.renderer &&
+      typeof this.renderer.setIntensity === "function"
+    ) {
+      this.renderer.setIntensity(this.intensity);
+    }
+  },
+
+  setRenderer(renderer) {
+    this.stop();
+
+    this.renderer = renderer || null;
+
+    if (
+      this.renderer &&
+      typeof this.renderer.init === "function"
+    ) {
+      this.renderer.init(
+        this.ctx,
+        window.innerWidth,
+        window.innerHeight,
+        this.intensity
+      );
+    }
+
+    if (this.mode === "dynamic") {
+      this.start();
+    }
+  },
+
+  start() {
+    if (!this.canvas || !this.ctx) return;
+    if (!this.renderer) return;
+    if (this.running) return;
+
+    this.running = true;
+    this.canvas.style.display = "block";
+
+    this.loop();
+  },
+
+  stop() {
+    this.running = false;
+
+    if (this.animationId !== null) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+  },
+
+  clear() {
+    if (!this.ctx) return;
+
+    this.ctx.clearRect(
+      0,
+      0,
+      window.innerWidth,
+      window.innerHeight
+    );
+
+    this.canvas.style.display = "none";
+  },
+
+  loop(timestamp) {
+    if (!this.running) return;
+
+    this.animationId = requestAnimationFrame(
+      (time) => this.loop(time)
+    );
+
+    if (!this.renderer) return;
+
+    if (typeof this.renderer.update === "function") {
+      this.renderer.update(timestamp);
+    }
+
+    if (typeof this.renderer.render === "function") {
+      this.renderer.render();
+    }
+  }
+};
+
   /* ================= DOM / 弹窗 ================= */
   const $ = (sel, root) => (root || document).querySelector(sel);
+  const FA_ALIASES = {
+    megaphone: "bullhorn", "speech-balloon": "comment-dots", pushpin: "thumbtack",
+    "office-worker": "user-tie", "person-raising-hand": "hand", unlocked: "unlock",
+    locked: "lock", eyes: "eye", "check-mark-button": "circle-check",
+    "satellite-antenna": "satellite-dish", "antenna-bars": "tower-broadcast",
+    "mechanical-arm": "robot", "nut-and-bolt": "screwdriver-wrench", "high-voltage": "bolt",
+    "triangular-ruler": "ruler-combined", "input-numbers": "calculator", telescope: "atom",
+    "test-tube": "flask-vial", brick: "cubes-stacked", "building-construction": "building",
+    "money-bag": "sack-dollar", clipboard: "clipboard-list", "artist-palette": "palette",
+    books: "book-open", "balance-scale": "scale-balanced", battery: "battery-full", airplane: "plane"
+  };
+  const faIcon = (name, className) => '<i class="fa-solid fa-' + (FA_ALIASES[name] || name) + ' ui-icon ' + (className || "") + '" aria-hidden="true"></i>';
   const modalOverlay = $("#modal-overlay");
   const modalContent = $("#modal-content");
   const modalClose = $("#modal-close");
@@ -196,7 +725,7 @@
     modalClosable = closable !== false;
     modalContent.innerHTML = html;
     modalOverlay.hidden = false;
-    modalClose.style.display = modalClosable ? "" : "none";
+    modalClose.style.display = "";
     const box = modalContent;
     box.scrollTop = 0;
   }
@@ -210,7 +739,7 @@ function showThemeChooser() {
       ? currentThemeId
       : null;
 
-  // 从 THEMES 对象中取出 5 个主题
+  // 从 THEMES 对象中取出全部主题
   const themes = Object.values(THEMES);
 
   // 根据主题数据自动生成主题卡片
@@ -351,6 +880,7 @@ resetButton.addEventListener("click", () => {
 
   let toastTimer = null;
   function showToast(msg) {
+    if (petController) petController.react(msg);
     const toast = $("#toast");
     toast.textContent = msg;
     toast.hidden = false;
@@ -383,17 +913,22 @@ resetButton.addEventListener("click", () => {
       if (csrf) headers["X-CSRF-Token"] = csrf;
     }
     let res;
+    if (petController && String(method).toUpperCase() !== "GET") petController.loading();
     try {
-      res = await fetch(path, { method: method, headers: headers, credentials: "same-origin", body: body !== undefined ? JSON.stringify(body) : undefined, cache: "no-store" });
+      const url = path.startsWith("/") ? path : "/" + path;
+      res = await fetch(url, { method: method, headers: headers, credentials: "same-origin", body: body !== undefined ? JSON.stringify(body) : undefined, cache: "no-store" });
     } catch (e) {
+      if (petController) petController.error();
       throw new Error("无法连接服务器，请检查网络");
     }
     let data = {};
     try { data = await res.json(); } catch (e) {}
     if (!res.ok) {
+      if (petController) petController.error();
       if (res.status === 401 && state.user) { clearSession(); renderHeader(); showToast("登录状态已失效，请重新登录"); }
       const err = new Error(data.error || "请求失败"); err.status = res.status; throw err;
     }
+    if (petController && String(method).toUpperCase() !== "GET") petController.success();
     return data;
   }
 
@@ -417,30 +952,55 @@ resetButton.addEventListener("click", () => {
     uploadFile: (id, payload) => api("POST", "api/topics/" + encodeURIComponent(id) + "/files", payload),
     setTag: (id, memberId, tag) => api("POST", "api/topics/" + encodeURIComponent(id) + "/members/" + encodeURIComponent(memberId) + "/tag", { tag: tag }),
     removeMember: (id, memberId) => api("DELETE", "api/topics/" + encodeURIComponent(id) + "/members/" + encodeURIComponent(memberId)),
-    aiConfig: () => api("GET", "api/ai/config"),
-    ai: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/ai"),
-    aiToggle: (id, enabled) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/toggle", { enabled: enabled }),
-    aiThink: (id) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/think", {}),
-    aiVote: (id, optionId) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/vote", { optionId: optionId }),
-    aiClose: (id) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/close", {}),
-    aiDeep: (id) => api("POST", "api/topics/" + encodeURIComponent(id) + "/ai/deep", {}),
     deleteFile: (topicId, fileId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/files/" + encodeURIComponent(fileId)),
     editMessage: (topicId, msgId, text) => api("PATCH", "api/topics/" + encodeURIComponent(topicId) + "/messages/" + encodeURIComponent(msgId), { text: text }),
     recallMessage: (topicId, msgId) => api("DELETE", "api/topics/" + encodeURIComponent(topicId) + "/messages/" + encodeURIComponent(msgId)),
     sseTicket: () => api("POST", "api/sse/ticket", {}),
     report: (payload) => api("POST", "api/reports", payload),
     adminReports: () => api("GET", "api/admin/reports"),
-    resolveReport: (id) => api("POST", "api/admin/reports/" + encodeURIComponent(id) + "/resolve", {}),
+    resolveReport: (id, payload) => api("POST", "api/admin/reports/" + encodeURIComponent(id) + "/resolve", payload || {}),
     notifications: () => api("GET", "api/notifications"),
     readNotifications: (payload) => api("POST", "api/notifications/read", payload || { all: true }),
     adminUsers: () => api("GET", "api/admin/users"),
-    adminBan: (userId, banned) => api("POST", "api/admin/users/" + encodeURIComponent(userId) + "/ban", { banned: banned })
+    adminBan: (userId, banned) => api("POST", "api/admin/users/" + encodeURIComponent(userId) + "/ban", { banned: banned }),
+    adminMute: (userId, muted) => api("POST", "api/admin/users/" + encodeURIComponent(userId) + "/mute", { muted: muted }),
+    adminStats: () => api("GET", "api/admin/stats"),
+    adminAudit: () => api("GET", "api/admin/audit"),
+    adminTopics: () => api("GET", "api/admin/topics"),
+    adminFiles: () => api("GET", "api/admin/files"),
+    adminDeleteFile: (id) => api("DELETE", "api/admin/files/" + encodeURIComponent(id)),
+    adminAnnouncements: () => api("GET", "api/admin/announcements"),
+    adminCreateAnnouncement: (payload) => api("POST", "api/admin/announcements", payload),
+    adminUpdateAnnouncement: (id, payload) => api("PATCH", "api/admin/announcements/" + encodeURIComponent(id), payload),
+    adminDeleteAnnouncement: (id) => api("DELETE", "api/admin/announcements/" + encodeURIComponent(id)),
+    adminAppeals: () => api("GET", "api/admin/appeals"),
+    adminResolveAppeal: (id, payload) => api("POST", "api/admin/appeals/" + encodeURIComponent(id) + "/resolve", payload),
+    adminPenalties: () => api("GET", "api/admin/penalties"),
+    adminRevokePenalty: (id) => api("POST", "api/admin/penalties/" + encodeURIComponent(id) + "/revoke", {}),
+    announcements: () => api("GET", "api/announcements"),
+    readAnnouncement: (id) => api("POST", "api/announcements/" + encodeURIComponent(id) + "/read", {}),
+    appeals: () => api("GET", "api/appeals"),
+    createAppeal: (payload) => api("POST", "api/appeals", payload),
+    setProjectStatus: (id, status) => api("POST", "api/topics/" + encodeURIComponent(id) + "/status", { status: status }),
+    transferOwner: (id, userId) => api("POST", "api/topics/" + encodeURIComponent(id) + "/owner", { userId: userId }),
+    tasks: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/tasks"),
+    createTask: (id, payload) => api("POST", "api/topics/" + encodeURIComponent(id) + "/tasks", payload),
+    updateTask: (id, taskId, payload) => api("PATCH", "api/topics/" + encodeURIComponent(id) + "/tasks/" + encodeURIComponent(taskId), payload),
+    deleteTask: (id, taskId) => api("DELETE", "api/topics/" + encodeURIComponent(id) + "/tasks/" + encodeURIComponent(taskId)),
+    activities: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/activities"),
+    resources: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/resources"),
+    createResource: (id, payload) => api("POST", "api/topics/" + encodeURIComponent(id) + "/resources", payload),
+    deleteResource: (id, resourceId) => api("DELETE", "api/topics/" + encodeURIComponent(id) + "/resources/" + encodeURIComponent(resourceId)),
+    outcome: (id) => api("GET", "api/topics/" + encodeURIComponent(id) + "/outcome"),
+    saveOutcome: (id, payload) => api("PATCH", "api/topics/" + encodeURIComponent(id) + "/outcome", payload)
+
   };
 
   /* ================= 顶部信息 ================= */
   function renderHeader() {
     const chip = $("#user-chip");
     if (typeof renderBell === "function") renderBell();
+    if (typeof renderAnnouncementBell === "function") renderAnnouncementBell();
     const authBtn = $("#btn-auth");
     const logoutBtn = $("#btn-logout");
     const inboxBtn = $("#btn-inbox");
@@ -472,7 +1032,7 @@ resetButton.addEventListener("click", () => {
     state.topics.forEach((t) => topicDirections(t).forEach((id) => { if (distinct.indexOf(id) < 0) distinct.push(id); }));
     let html = '<button class="filter-chip' + (state.filter === "all" ? " is-on" : "") + '" data-filter="all" type="button">全部</button>';
     distinct.forEach((id) => {
-      html += '<button class="filter-chip' + (state.filter === id ? " is-on" : "") + '" data-filter="' + id + '" type="button">' + majorLabel(id) + '</button>';
+      html += '<button class="filter-chip' + (state.filter === id ? " is-on" : "") + '" data-filter="' + id + '" type="button">' + faIcon(majorIcon(id), "filter-icon-img") + escapeHtml(majorLabel(id)) + '</button>';
     });
     bar.innerHTML = html;
     bar.querySelectorAll("[data-filter]").forEach((b) => {
@@ -482,36 +1042,38 @@ resetButton.addEventListener("click", () => {
 
   function topicCard(t) {
     const dirs = topicDirections(t);
-    const dirChips = dirs.slice(0, 2).map((id) => '<span class="topic-direction">' + escapeHtml(majorLabel(id)) + '</span>').join("") +
+    const statusLabel = PROJECT_STATUS_LABELS[t.status] || "招集中";
+    const category = PROJECT_CATEGORY_LABELS[projectCategory(t)] || "其他";
+    const dirChips = dirs.slice(0, 2).map((id) => '<span class="topic-direction">' + faIcon(majorIcon(id), "inline-icon") + escapeHtml(majorName(id)) + '</span>').join("") +
       (dirs.length > 2 ? '<span class="topic-direction">+' + (dirs.length - 2) + '</span>' : "");
-    const typeBadge = t.type === "public" ? '<span class="badge badge-public">🔓 公开话题</span>' : '<span class="badge badge-private">🔒 私密话题</span>';
+    const typeBadge = t.type === "public" ? '<span class="badge badge-public">' + faIcon("unlocked", "badge-icon") + '公开话题</span>' : '<span class="badge badge-private">' + faIcon("locked", "badge-icon") + '私密话题</span>';
     const need = (t.neededRoles || []).length ? escapeHtml(t.neededRoles.join(" / ")) : "不限";
     const miss = missingTags(t);
     const missHtml = t.neededRoles && t.neededRoles.length
-      ? (miss.length ? '<p class="topic-missing">还缺：<strong>' + escapeHtml(miss.join(" / ")) + '</strong></p>' : '<p class="topic-missing is-done">角色已齐 ✓</p>')
+      ? (miss.length ? '<p class="topic-missing">还缺：<strong>' + escapeHtml(miss.slice(0, 3).join(" / ")) + '</strong></p>' : '<p class="topic-missing is-done">角色已齐 ✓</p>')
       : "";
-
     const member = isMember(t);
     const leader = isLeader(t);
     const appStatus = myAppStatus(t.id);
     const memberCount = Number.isFinite(t.memberCount) ? t.memberCount : t.members.length;
     const full = !member && memberCount >= t.limit;
-    let label = "申请加入", cls = "btn-ghost", disabled = "", actionAttr = 'data-open="' + t.id + '"';
-    if (member) { label = "进入话题"; cls = "btn-primary"; }
-    else if (full) { label = "已满员"; disabled = " disabled"; }
+    let label = "查看项目", cls = "btn-ghost", actionAttr = 'data-open="' + t.id + '"';
+    if (member) { label = "进入项目"; cls = "btn-primary"; }
     else if (appStatus === "pending") { label = "取消申请"; cls = "btn-danger"; actionAttr = 'data-cancel-app="' + t.id + '"'; }
-    else if (appStatus === "rejected") { label = "重新申请"; }
-
+    const recruit = t.status === "recruiting" ? '<span class="topic-recruit">正在招募</span>' : "";
+    const fullBadge = full ? '<span class="topic-full">已满员</span>' : "";
     return '<article class="topic-card">' +
-      '<div class="topic-head">' + typeBadge + dirChips + '<span class="topic-limit">' + t.members.length + '/' + t.limit + '</span></div>' +
+      '<div class="topic-head">' + typeBadge + recruit + fullBadge + '<span class="topic-status">' + escapeHtml(statusLabel) + '</span>' + dirChips + '</div>' +
+      '<div class="topic-card-body"><div class="topic-card-kicker">' + escapeHtml(category) + ' · <span class="topic-count">成员 ' + memberCount + '/' + t.limit + '</span></div>' +
       '<h3 class="topic-title">' + escapeHtml(t.title) + '</h3>' +
       '<p class="topic-desc">' + escapeHtml(t.desc || "暂无简介") + '</p>' +
       '<p class="topic-vibe">组内氛围：' + escapeHtml(t.vibe || "负责人还没有填写") + '</p>' +
-      '<p class="topic-require">' + (t.type === "public" ? "加入需要方向：" + escapeHtml(requiredLabels(t) || "不限") : "🔒 需要负责人提供的 6 位密码") + '</p>' +
-      '<p class="topic-roles">需要角色：' + need + '</p>' + missHtml +
-      '<div class="topic-foot"><span class="topic-owner">' + (t.memberHidden ? '负责人 · <strong>（私密项目）</strong>' : '负责人 · <strong>' + escapeHtml(t.members[0] ? t.members[0].nickname : "—") + '</strong>') + '</span>' +
+      '<p class="topic-require">研究方向：' + escapeHtml(topicDirectionLabel(t) || "不限") + '</p>' +
+      '<p class="topic-roles">需要角色：' + need + '</p>' + missHtml + '</div>' +
+      '<div class="topic-foot"><span class="topic-owner">负责人 · <strong>' + (t.memberHidden ? "私密项目" : escapeHtml(t.members[0] ? t.members[0].nickname : "—")) + '</strong></span>' +
       '<span class="topic-actions">' +
-        '<button class="btn ' + cls + ' btn-small" type="button" ' + actionAttr + disabled + '>' + label + '</button>' +
+        '<button class="btn ' + cls + ' btn-small" type="button" ' + actionAttr + '>' + label + '</button>' +
+        '<button class="btn btn-ghost btn-small" type="button" data-share="' + t.id + '">复制链接</button>' +
         (leader ? '<button class="btn btn-danger btn-small" type="button" data-delete="' + t.id + '">删除</button>' : '') +
       '</span></div></article>';
   }
@@ -520,18 +1082,23 @@ resetButton.addEventListener("click", () => {
     const grid = $("#topic-grid");
     const empty = $("#empty-state");
     const kw = (state.search || "").trim().toLowerCase();
+    const category = state.categoryFilter || "all";
     const list = state.topics.filter((t) => {
       const dirs = topicDirections(t);
-      const okFilter = state.filter === "all" || dirs.indexOf(state.filter) >= 0 || (t.required || []).indexOf(state.filter) >= 0;
-      if (!okFilter) return false;
-      if (!kw) return true;
-      const hay = (t.title + " " + (t.desc || "") + " " + (t.vibe || "") + " " + dirs.map(majorName).join(" ") + " " + (t.neededRoles || []).join(" ") + " " + requiredLabels(t) + " " + t.type + " " + (t.members[0] && t.members[0].nickname)).toLowerCase();
-      return hay.indexOf(kw) >= 0;
+      const okDirection = state.filter === "all" || dirs.indexOf(state.filter) >= 0 || (t.required || []).indexOf(state.filter) >= 0;
+      if (!okDirection) return false;
+      if (category !== "all" && projectCategory(t) !== category) return false;
+      if (state.statusFilter !== "all" && t.status !== state.statusFilter) return false;
+      if (state.recruitingOnly && t.status !== "recruiting") return false;
+      return !kw || projectSearchText(t).indexOf(kw) >= 0;
     });
 
     $("#stat-topics").textContent = state.topics.length;
     $("#stat-members").textContent = state.topics.reduce((n, t) => n + (Number.isFinite(t.memberCount) ? t.memberCount : t.members.length), 0);
-    $("#result-count").textContent = "共 " + list.length + " 个项目";
+    const resultCount = $("#result-count");
+    if (resultCount) {
+      resultCount.textContent = kw ? ("搜索到 " + list.length + " 个项目") : ((category !== "all" || state.statusFilter !== "all" || state.recruitingOnly) ? ("筛选出 " + list.length + " 个项目") : ("共 " + list.length + " 个项目 · 可搜索名称、简介、研究方向"));
+    }
 
     grid.innerHTML = list.map(topicCard).join("");
     empty.hidden = list.length > 0;
@@ -543,28 +1110,48 @@ resetButton.addEventListener("click", () => {
         titleEl.textContent = "还没有任何项目";
         subEl.textContent = "发布第一个项目，成为这里的第一个负责人。";
         createBtn.hidden = false;
-      } else {
+      } else if (kw) {
         titleEl.textContent = "没有找到匹配的项目";
-        subEl.textContent = "换个关键词或方向试试，也可以发布一个新项目。";
+        subEl.textContent = "试试其他项目名称、简介或研究方向。";
+        createBtn.hidden = true;
+      } else {
+        titleEl.textContent = "当前筛选下没有项目";
+        subEl.textContent = "换一个分类、方向或状态再试试。";
         createBtn.hidden = true;
       }
     }
 
-    grid.querySelectorAll("[data-open]").forEach((b) => {
-      b.addEventListener("click", () => handleOpenTopic(b.getAttribute("data-open")));
-    });
-    grid.querySelectorAll("[data-cancel-app]").forEach((b) => {
-      b.addEventListener("click", () => {
-        const topic = state.topics.find((t) => t.id === b.getAttribute("data-cancel-app"));
-        if (topic) openCancelApplicationModal(topic);
-      });
-    });
-    grid.querySelectorAll("[data-delete]").forEach((b) => {
-      b.addEventListener("click", () => {
-        const topic = state.topics.find((t) => t.id === b.getAttribute("data-delete"));
-        if (topic) openDeleteModal(topic);
-      });
-    });
+    grid.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => handleOpenTopic(b.getAttribute("data-open"))));
+    grid.querySelectorAll("[data-cancel-app]").forEach((b) => b.addEventListener("click", () => {
+      const topic = state.topics.find((t) => t.id === b.getAttribute("data-cancel-app"));
+      if (topic) openCancelApplicationModal(topic);
+    }));
+    grid.querySelectorAll("[data-share]").forEach((b) => b.addEventListener("click", () => copyProjectLink(b.getAttribute("data-share"))));
+    grid.querySelectorAll("[data-delete]").forEach((b) => b.addEventListener("click", () => {
+      const topic = state.topics.find((t) => t.id === b.getAttribute("data-delete"));
+      if (topic) openDeleteModal(topic);
+    }));
+  }
+
+  async function copyProjectLink(topicId) {
+    const url = location.origin + "/project/" + encodeURIComponent(topicId);
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(url);
+      else {
+        const input = document.createElement("textarea");
+        input.value = url; input.setAttribute("readonly", ""); input.style.position = "fixed"; input.style.opacity = "0";
+        document.body.appendChild(input); input.select(); document.execCommand("copy"); input.remove();
+      }
+      showToast("项目链接已复制");
+    } catch (e) {
+      window.prompt("复制项目链接", url);
+    }
+  }
+
+  async function openSharedProject(topicId) {
+    if (!topicId) return;
+    if (!state.topics.some((t) => t.id === topicId)) { showToast("项目不存在或暂不可访问"); return; }
+    await handleOpenTopic(topicId);
   }
 
   function renderPlaza() {
@@ -584,7 +1171,8 @@ resetButton.addEventListener("click", () => {
       (mode === "register" ? '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' : '') +
       '<p class="form-error js-error" hidden></p>' +
       '<button class="btn btn-primary btn-full" type="button" data-submit>' + (mode === "login" ? "登录" : "注册并登录") + '</button>' +
-      '<p class="form-note note-center note-mt-14">' + (mode === "login" ? "还没有账号？点上面的「注册」" : "已有账号？点上面的「登录」") + '</p>';
+      '<p class="form-note note-center note-mt-14">' + (mode === "login" ? "还没有账号？点上面的「注册」" : "已有账号？点上面的「登录」") + '</p>' +
+      '<p class="form-note note-center auth-legal">继续使用即表示你同意 <a href="terms.html" target="_blank" rel="noopener">用户协议</a> 与 <a href="privacy.html" target="_blank" rel="noopener">隐私政策</a>。</p>';
   }
 
   function openAuthModal(opts) {
@@ -626,11 +1214,42 @@ resetButton.addEventListener("click", () => {
   }
 
   async function loadPrivateData() {
-    if (!isLogged()) { state.inbox = []; state.myApplications = []; return; }
+    if (!isLogged()) { state.inbox = []; state.myApplications = []; state.appeals = []; return; }
     try { const r = await Store.myApplications(); state.myApplications = r.applications || []; } catch (e) {}
     try { const r = await Store.inbox(); state.inbox = r.applications || []; } catch (e) {}
+    try { const r = await Store.appeals(); state.appeals = r.appeals || []; } catch (e) {}
     await loadNotifications();
     await flushOutbox();
+  }
+
+    /* ================= 首次主题选择 ================= */
+  function openThemeChooser() {
+    return showThemeChooser();
+  }
+
+  function loadBackgroundPreference() {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      dynamicBackground.setMode("static");
+      dynamicBackground.setIntensity("soft");
+      return;
+    }
+    let mode = "dynamic";
+    let intensity = "standard";
+    try {
+      const savedMode = localStorage.getItem(BACKGROUND_KEY);
+      const savedIntensity = localStorage.getItem(DYNAMIC_INTENSITY_KEY);
+      if (savedMode === "dynamic") mode = "dynamic";
+      if (["soft", "standard", "immersive"].includes(savedIntensity)) intensity = savedIntensity;
+    } catch (e) {}
+    dynamicBackground.setMode(mode);
+    dynamicBackground.setIntensity(intensity);
+  }
+
+  function saveBackgroundPreference(mode, intensity) {
+    try {
+      localStorage.setItem(BACKGROUND_KEY, mode === "dynamic" ? "dynamic" : "static");
+      localStorage.setItem(DYNAMIC_INTENSITY_KEY, ["soft", "standard", "immersive"].includes(intensity) ? intensity : "standard");
+    } catch (e) {}
   }
 
   /* ================= 身份选择 ================= */
@@ -639,8 +1258,8 @@ resetButton.addEventListener("click", () => {
       '<h2 class="modal-title">你是谁？</h2>' +
       '<p class="modal-sub">选择你的身份，ProjectHub 会带你去到对应的地方。</p>' +
       '<div class="role-options">' +
-        '<button class="role-option" type="button" data-role="leader"><span class="role-icon">🧑‍💼</span><h3>项目负责人</h3><p>我有一个项目想法，想创建话题、招募队友。</p></button>' +
-        '<button class="role-option" type="button" data-role="member"><span class="role-icon">🙋</span><h3>项目成员</h3><p>我想找感兴趣的项目，申请加入团队。</p></button>' +
+        '<button class="role-option" type="button" data-role="leader"><span class="role-icon">' + faIcon("office-worker", "role-icon-img") + '</span><h3>项目负责人</h3><p>我有一个项目想法，想创建话题、招募队友。</p></button>' +
+        '<button class="role-option" type="button" data-role="member"><span class="role-icon">' + faIcon("person-raising-hand", "role-icon-img") + '</span><h3>项目成员</h3><p>我想找感兴趣的项目，申请加入团队。</p></button>' +
       '</div>' +
       '<p class="form-note note-center note-mt-18"><button class="link-btn" type="button" data-login>' + (isLogged() ? "已登录：" + escapeHtml(state.user.nickname) : "已有账号？直接登录") + '</button></p>', false);
     $("#modal-content [data-role='leader']").addEventListener("click", openLeaderFlow);
@@ -669,7 +1288,7 @@ resetButton.addEventListener("click", () => {
 
       if (step === 0) {
         html += '<h2 class="modal-title">你的项目涉及哪些方向？</h2><p class="modal-sub">参考中国高校专业方向，可多选，最多 5 个。</p><div class="major-grid">';
-        MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.directions.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-major="' + m.id + '"><span class="mj-icon">' + m.icon + '</span>' + m.label + '</button>'; });
+        MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.directions.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-major="' + m.id + '">' + faIcon(m.icon, "mj-icon-img") + m.label + '</button>'; });
         html += '</div><p class="wizard-hint">已选 ' + d.directions.length + ' / 5</p><div class="wizard-foot"><button class="btn btn-primary btn-full" type="button" data-next' + (d.directions.length ? "" : " disabled") + '>下一步</button></div>';
         showModal(html, true);
         const box = modalContent, hint = box.querySelector(".wizard-hint"), next = box.querySelector("[data-next]");
@@ -687,8 +1306,8 @@ resetButton.addEventListener("click", () => {
 
       else if (step === 1) {
         html += '<h2 class="modal-title">公开话题还是私密话题？</h2><p class="modal-sub">公开话题按方向申请；私密话题需要 6 位密码才能申请。</p><div class="choice-grid">' +
-          '<button class="choice-card' + (d.type === "public" ? " is-on" : "") + '" type="button" data-type="public"><span class="choice-icon">🔓</span><h4>公开话题</h4><p>设置申请加入所需的方向，符合方向的同学可以申请。</p></button>' +
-          '<button class="choice-card' + (d.type === "private" ? " is-on" : "") + '" type="button" data-type="private"><span class="choice-icon">🔒</span><h4>私密话题</h4><p>设置 6 位密码，拿到密码的同学才能申请加入。</p></button>' +
+          '<button class="choice-card' + (d.type === "public" ? " is-on" : "") + '" type="button" data-type="public"><span class="choice-icon">' + faIcon("unlocked", "choice-icon-img") + '</span><h4>公开话题</h4><p>设置申请加入所需的方向，符合方向的同学可以申请。</p></button>' +
+          '<button class="choice-card' + (d.type === "private" ? " is-on" : "") + '" type="button" data-type="private"><span class="choice-icon">' + faIcon("locked", "choice-icon-img") + '</span><h4>私密话题</h4><p>设置 6 位密码，拿到密码的同学才能申请加入。</p></button>' +
           '</div><p class="wizard-hint" data-type-hint>' + (d.type ? "已选择：" + (d.type === "public" ? "公开话题" : "私密话题") : "请点击上面的卡片选择话题类型") + '</p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next' + (d.type ? "" : " disabled") + '>下一步</button></div>';
         showModal(html, true);
@@ -710,6 +1329,7 @@ resetButton.addEventListener("click", () => {
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
           '<p class="form-error js-reg-error" hidden></p>' +
           '<p class="form-note note-center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
+          '<p class="form-note note-center auth-legal">继续使用即表示你同意 <a href="terms.html" target="_blank" rel="noopener">用户协议</a> 与 <a href="privacy.html" target="_blank" rel="noopener">隐私政策</a>。</p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>注册并继续</button></div>';
         showModal(html, true);
         const box = modalContent;
@@ -744,13 +1364,13 @@ resetButton.addEventListener("click", () => {
         html += '<div class="field"><label>项目名称</label><input class="input js-title" type="text" placeholder="例如：校园智能垃圾分类系统" value="' + escapeHtml(d.title) + '"></div>' +
           '<div class="field"><label>项目简介</label><textarea class="textarea js-desc" placeholder="简单说说这个项目想做什么">' + escapeHtml(d.desc) + '</textarea></div>' +
           '<div class="field"><label>组内氛围</label><input class="input js-vibe" type="text" maxlength="60" placeholder="例如：轻松但高效，每周一次线上同步" value="' + escapeHtml(d.vibe) + '"></div>' +
-          '<div class="form-row"><div class="field"><label>人数限制</label><input class="input js-limit" type="number" min="2" max="50" value="' + d.limit + '"></div><div class="field"><label>话题类型</label><input class="input" type="text" value="' + (d.type === "private" ? "🔒 私密话题" : "🔓 公开话题") + '" readonly></div></div>' +
+          '<div class="form-row"><div class="field"><label>需要人数（含负责人）</label><input class="input js-limit" type="number" min="2" max="50" value="' + d.limit + '"></div><div class="field"><label>话题类型</label><input class="input" type="text" value="' + (d.type === "private" ? "私密话题" : "公开话题") + '" readonly></div></div>' +
           '<div class="field"><label>需要的成员标签（可多选）</label></div><div class="chip-grid" data-roles>';
         ROLE_TAGS.forEach((t) => { html += '<button class="chip' + (d.neededRoles.indexOf(t) >= 0 ? " is-on" : "") + '" type="button" data-role-tag="' + t + '">' + t + '</button>'; });
         html += '</div><p class="wizard-hint js-role-hint hint-left">已选 ' + d.neededRoles.length + ' 个标签' + (d.neededRoles.length ? '：' + escapeHtml(d.neededRoles.join("、")) : '（可以不选，也可以随时修改）') + '</p>';
         if (d.type === "public") {
           html += '<div class="field mt-18"><label>申请加入所需的项目方向（可多选，最多 5 个）</label></div><div class="major-grid">';
-          MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.required.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-req="' + m.id + '"><span class="mj-icon">' + m.icon + '</span>' + m.label + '</button>'; });
+          MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.required.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-req="' + m.id + '">' + faIcon(m.icon, "mj-icon-img") + m.label + '</button>'; });
           html += '</div>';
         } else {
           html += '<div class="field mt-18"><label>加入密码（6 位数字）</label><input class="input input-code js-code" type="password" inputmode="numeric" maxlength="6" placeholder="000000" value="' + escapeHtml(d.code) + '"></div><p class="form-note">同学申请加入时需要输入这 6 位密码。</p>';
@@ -819,7 +1439,7 @@ resetButton.addEventListener("click", () => {
 
       if (step === 0) {
         html += '<h2 class="modal-title">你擅长或愿意学习哪些方向？</h2><p class="modal-sub">可多选，最多 3 个。哪怕现在还需要学习，也可以先选上。</p><div class="major-grid">';
-        MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.directions.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-major="' + m.id + '"><span class="mj-icon">' + m.icon + '</span>' + m.label + '</button>'; });
+        MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.directions.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-major="' + m.id + '">' + faIcon(m.icon, "mj-icon-img") + m.label + '</button>'; });
         html += '</div><p class="wizard-hint">已选 ' + d.directions.length + ' / 3</p><div class="wizard-foot"><button class="btn btn-primary btn-full" type="button" data-next' + (d.directions.length ? "" : " disabled") + '>下一步</button></div>';
         showModal(html, true);
         const box = modalContent, hint = box.querySelector(".wizard-hint"), next = box.querySelector("[data-next]");
@@ -837,8 +1457,8 @@ resetButton.addEventListener("click", () => {
 
       else if (step === 1) {
         html += '<h2 class="modal-title">如何访问话题广场？</h2><p class="modal-sub">所有同学都能搜索项目；只有登录用户才能申请加入和聊天。</p><div class="choice-grid">' +
-          '<button class="choice-card' + (d.mode === "visitor" ? " is-on" : "") + '" type="button" data-mode="visitor"><span class="choice-icon">👀</span><h4>游客访问</h4><p>先逛逛、搜索项目，但不能申请加入。</p></button>' +
-          '<button class="choice-card' + (d.mode === "member" ? " is-on" : "") + '" type="button" data-mode="member"><span class="choice-icon">✅</span><h4>登录 / 注册</h4><p>可以申请加入项目，和团队一起聊天。</p></button>' +
+          '<button class="choice-card' + (d.mode === "visitor" ? " is-on" : "") + '" type="button" data-mode="visitor"><span class="choice-icon">' + faIcon("eyes", "choice-icon-img") + '</span><h4>游客访问</h4><p>先逛逛、搜索项目，但不能申请加入。</p></button>' +
+          '<button class="choice-card' + (d.mode === "member" ? " is-on" : "") + '" type="button" data-mode="member"><span class="choice-icon">' + faIcon("check-mark-button", "choice-icon-img") + '</span><h4>登录 / 注册</h4><p>可以申请加入项目，和团队一起聊天。</p></button>' +
           '</div><p class="wizard-hint" data-mode-hint>' + (d.mode ? "已选择：" + (d.mode === "visitor" ? "游客访问" : "登录 / 注册") : "请选择访问方式") + '</p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next' + (d.mode ? "" : " disabled") + '>' + (d.mode === "visitor" ? "进入广场" : "下一步") + '</button></div>';
         showModal(html, true);
@@ -865,6 +1485,7 @@ resetButton.addEventListener("click", () => {
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
           '<p class="form-error js-reg-error" hidden></p>' +
           '<p class="form-note note-center"><button class="link-btn" type="button" data-login>已有账号？直接登录</button></p>' +
+          '<p class="form-note note-center auth-legal">继续使用即表示你同意 <a href="terms.html" target="_blank" rel="noopener">用户协议</a> 与 <a href="privacy.html" target="_blank" rel="noopener">隐私政策</a>。</p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>注册并进入广场</button></div>';
         showModal(html, true);
         const box = modalContent;
@@ -1047,15 +1668,16 @@ resetButton.addEventListener("click", () => {
   /* ================= 管理员后台 ================= */
   function openAdminPanel() {
     if (!isAdmin()) { showToast("需要管理员权限"); return; }
-    showModal('<h2 class="modal-title">管理中心</h2><p class="modal-sub">管理员可以封禁账号、删除任意项目。</p>' +
-      '<div class="auth-tabs"><button class="auth-tab is-on" type="button" data-tab="users">用户管理</button><button class="auth-tab" type="button" data-tab="topics">项目管理</button><button class="auth-tab" type="button" data-tab="reports">举报处理</button></div>' +
+    const tabs = [["stats", "概览"], ["users", "用户"], ["projects", "项目"], ["announcements", "公告"], ["reports", "举报"], ["appeals", "申诉"], ["penalties", "处罚"], ["files", "文件"], ["logs", "日志"]];
+    showModal('<h2 class="modal-title">管理中心</h2><p class="modal-sub">管理员可以处理公告、账号、项目、举报与安全记录。</p>' +
+      '<div class="auth-tabs admin-tabs">' + tabs.map((t, i) => '<button class="auth-tab' + (i === 0 ? " is-on" : "") + '" type="button" data-tab="' + t[0] + '">' + t[1] + '</button>').join("") + '</div>' +
       '<div data-admin-body><p class="modal-sub">正在加载…</p></div>', true);
     const box = modalContent;
     box.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       box.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("is-on", x === b));
       renderAdmin(b.getAttribute("data-tab"));
     }));
-    renderAdmin("users");
+    renderAdmin("stats");
   }
 
   async function renderAdmin(tab) {
@@ -1063,14 +1685,20 @@ resetButton.addEventListener("click", () => {
     if (!box) return;
     box.innerHTML = '<p class="modal-sub">正在加载…</p>';
     try {
-      if (tab === "users") {
+      if (tab === "stats") {
+        const r = await Store.adminStats();
+        const s = r.stats || {};
+        const items = [["注册用户", s.users], ["项目话题", s.topics], ["聊天消息", s.messages], ["共享文件", s.files], ["待处理举报", s.reportsOpen], ["待处理申诉", s.appealsOpen], ["已发布公告", s.announcementsPublished], ["审计日志", s.auditLogs]];
+        box.innerHTML = '<div class="admin-stats">' + items.map((x) => '<div class="admin-stat"><strong>' + Number(x[1] || 0) + '</strong><span>' + x[0] + '</span></div>').join("") + '</div>';
+      } else if (tab === "users") {
         const r = await Store.adminUsers();
-        box.innerHTML = '<ul class="admin-list">' + (r.users || []).map((u) =>
-          '<li class="admin-row"><span class="m-avatar">' + escapeHtml((u.nickname || "用").slice(0, 1)) + '</span>' +
-          '<span class="admin-name">' + escapeHtml(u.nickname) + '<em>' + escapeHtml(u.grade || "") + ' · ' + (u.role === "admin" ? "管理员" : "普通用户") + (u.banned ? " · 已封禁" : "") + '</em></span>' +
-          '<span class="admin-meta">' + u.topicCount + ' 个项目</span>' +
-          (u.role === "admin" ? '<span class="admin-meta">—</span>' : '<button class="btn ' + (u.banned ? "btn-ghost" : "btn-danger") + ' btn-small" data-ban="' + u.id + '" data-banned="' + (u.banned ? "1" : "0") + '">' + (u.banned ? "解封" : "封禁") + '</button>') +
-          '</li>').join("") + '</ul>';
+        box.innerHTML = '<ul class="admin-list">' + (r.users || []).map((u) => {
+          const muted = Boolean(u.muted) || (u.penalties || []).some((p) => p.type === "mute" && p.active);
+          const actions = u.role === "admin" ? '<span class="admin-meta">管理员账号</span>' : '<button class="btn btn-quiet btn-small" data-mute="' + u.id + '" data-muted="' + (muted ? "1" : "0") + '">' + (muted ? "解除禁言" : "禁言") + '</button><button class="btn ' + (u.banned ? "btn-ghost" : "btn-danger") + ' btn-small" data-ban="' + u.id + '" data-banned="' + (u.banned ? "1" : "0") + '">' + (u.banned ? "解封" : "封禁") + '</button>';
+          return '<li class="admin-row"><span class="m-avatar">' + escapeHtml((u.nickname || "用").slice(0, 1)) + '</span>' +
+            '<span class="admin-name">' + escapeHtml(u.nickname || "用户") + '<em>' + escapeHtml(u.grade || "") + ' · ' + (u.role === "admin" ? "管理员" : "普通用户") + (u.banned ? " · 已封禁" : "") + (muted ? " · 已禁言" : "") + '</em></span>' +
+            '<span class="admin-meta">' + Number(u.topicCount || 0) + ' 个项目</span>' + actions + '</li>';
+        }).join("") + '</ul>';
         box.querySelectorAll("[data-ban]").forEach((b) => b.addEventListener("click", async () => {
           const banned = b.getAttribute("data-banned") === "1";
           try {
@@ -1079,23 +1707,103 @@ resetButton.addEventListener("click", () => {
             showToast(!banned ? "已封禁该账号" : "已解封该账号");
           } catch (e) { showToast(e.message || "操作失败"); }
         }));
+        box.querySelectorAll("[data-mute]").forEach((b) => b.addEventListener("click", async () => {
+          const muted = b.getAttribute("data-muted") === "1";
+          try {
+            await Store.adminMute(b.getAttribute("data-mute"), !muted);
+            renderAdmin("users");
+            showToast(!muted ? "已禁言该账号" : "已解除禁言");
+          } catch (e) { showToast(e.message || "操作失败"); }
+        }));
+      } else if (tab === "announcements") {
+        const r = await Store.adminAnnouncements();
+        const list = r.announcements || [];
+        box.innerHTML = '<div class="admin-form"><div class="field"><label>标题</label><input class="input js-ann-title" maxlength="100" placeholder="例如：平台维护通知"></div>' +
+          '<div class="field"><label>内容</label><textarea class="input admin-textarea js-ann-content" maxlength="5000" placeholder="填写公告正文"></textarea></div>' +
+          '<div class="admin-form-row"><label>状态<select class="select js-ann-status"><option value="draft">草稿</option><option value="published">立即发布</option></select></label>' +
+          '<label>级别<select class="select js-ann-importance"><option value="normal">普通</option><option value="important">重要</option><option value="security">安全</option><option value="policy">政策</option></select></label>' +
+          '<label class="confirm-check"><input type="checkbox" class="js-ann-pinned"><span>置顶</span></label><button class="btn btn-primary btn-small" data-ann-create>创建公告</button></div></div>' +
+          (list.length ? '<ul class="admin-list">' + list.map((a) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(a.title) + '<em>' + escapeHtml(ANNOUNCEMENT_STATUS_LABELS[a.status] || a.status || "草稿") + ' · ' + escapeHtml(a.importance || "normal") + ' · ' + formatDate(a.createdAt) + '</em></span>' +
+            (a.status === "published" ? '<button class="btn btn-quiet btn-small" data-ann-withdraw="' + a.id + '">撤回</button>' : '<button class="btn btn-primary btn-small" data-ann-publish="' + a.id + '">发布</button>') +
+            '<button class="btn btn-danger btn-small" data-ann-delete="' + a.id + '">归档</button></li>').join("") + '</ul>' : '<div class="empty-inbox">暂无公告。</div>');
+        box.querySelector("[data-ann-create]").addEventListener("click", async () => {
+          const payload = {
+            title: box.querySelector(".js-ann-title").value.trim(),
+            content: box.querySelector(".js-ann-content").value.trim(),
+            status: box.querySelector(".js-ann-status").value,
+            importance: box.querySelector(".js-ann-importance").value,
+            pinned: box.querySelector(".js-ann-pinned").checked
+          };
+          try { await Store.adminCreateAnnouncement(payload); renderAdmin("announcements"); showToast("公告已创建"); }
+          catch (e) { showToast(e.message || "创建失败"); }
+        });
+        box.querySelectorAll("[data-ann-publish]").forEach((b) => b.addEventListener("click", async () => {
+          try { await Store.adminUpdateAnnouncement(b.getAttribute("data-ann-publish"), { status: "published" }); renderAdmin("announcements"); showToast("公告已发布"); }
+          catch (e) { showToast(e.message || "发布失败"); }
+        }));
+        box.querySelectorAll("[data-ann-withdraw]").forEach((b) => b.addEventListener("click", async () => {
+          try { await Store.adminUpdateAnnouncement(b.getAttribute("data-ann-withdraw"), { status: "withdrawn" }); renderAdmin("announcements"); showToast("公告已撤回"); }
+          catch (e) { showToast(e.message || "撤回失败"); }
+        }));
+        box.querySelectorAll("[data-ann-delete]").forEach((b) => b.addEventListener("click", async () => {
+          if (!window.confirm("确认归档这条公告？")) return;
+          try { await Store.adminDeleteAnnouncement(b.getAttribute("data-ann-delete")); renderAdmin("announcements"); showToast("公告已归档"); }
+          catch (e) { showToast(e.message || "归档失败"); }
+        }));
       } else if (tab === "reports") {
         const r = await Store.adminReports();
         const list = r.reports || [];
         box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((rep) =>
           '<li class="admin-row"><span class="admin-name">' + escapeHtml(rep.reason) + '<em>' + escapeHtml((rep.topicTitle || "（无关联项目）")) + ' · 举报人：' + escapeHtml(rep.reporterName || "") + ' · ' + formatDate(rep.createdAt) + (rep.status === "resolved" ? " · 已处理（" + escapeHtml(rep.handledBy || "") + "）" : "") + '</em></span>' +
           (rep.detail ? '<span class="admin-meta">' + escapeHtml(rep.detail.slice(0, 60)) + '</span>' : "") +
-          (rep.status === "resolved" ? "" : '<button class="btn btn-primary btn-small" data-resolve="' + rep.id + '">标记已处理</button>') +
+          (rep.status === "open" ? '<button class="btn btn-primary btn-small" data-resolve="' + rep.id + '">标记已处理</button><button class="btn btn-quiet btn-small" data-dismiss="' + rep.id + '">忽略</button>' : "") +
           '</li>').join("") + '</ul>' : '<div class="empty-inbox">暂无举报记录。</div>';
         box.querySelectorAll("[data-resolve]").forEach((b) => b.addEventListener("click", async () => {
-          try { await Store.resolveReport(b.getAttribute("data-resolve")); renderAdmin("reports"); showToast("已标记为处理完成"); }
+          try { await Store.resolveReport(b.getAttribute("data-resolve"), { action: "resolve" }); renderAdmin("reports"); showToast("已标记为处理完成"); }
           catch (e) { showToast(e.message || "操作失败"); }
         }));
+        box.querySelectorAll("[data-dismiss]").forEach((b) => b.addEventListener("click", async () => {
+          try { await Store.resolveReport(b.getAttribute("data-dismiss"), { action: "dismiss" }); renderAdmin("reports"); showToast("已忽略该举报"); }
+          catch (e) { showToast(e.message || "操作失败"); }
+        }));
+      } else if (tab === "appeals") {
+        const r = await Store.adminAppeals();
+        const list = r.appeals || [];
+        box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((a) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(a.nickname || "用户") + '：' + escapeHtml(a.reason) + '<em>' + escapeHtml(a.penaltyType === "ban" ? "封禁申诉" : "禁言申诉") + ' · ' + formatDate(a.createdAt) + ' · ' + (a.status === "pending" ? "待处理" : "已处理") + '</em></span>' +
+          (a.status === "pending" ? '<button class="btn btn-primary btn-small" data-appeal-ok="' + a.id + '">通过</button><button class="btn btn-quiet btn-small" data-appeal-no="' + a.id + '">驳回</button>' : "") + '</li>').join("") + '</ul>' : '<div class="empty-inbox">暂无申诉。</div>';
+        box.querySelectorAll("[data-appeal-ok], [data-appeal-no]").forEach((b) => b.addEventListener("click", async () => {
+          const ok = b.hasAttribute("data-appeal-ok");
+          const id = b.getAttribute(ok ? "data-appeal-ok" : "data-appeal-no");
+          try { await Store.adminResolveAppeal(id, { decision: ok ? "approved" : "rejected", result: ok ? "管理员已通过申诉" : "管理员已驳回申诉" }); renderAdmin("appeals"); showToast("申诉已处理"); }
+          catch (e) { showToast(e.message || "处理失败"); }
+        }));
+      } else if (tab === "penalties") {
+        const r = await Store.adminPenalties();
+        const list = r.penalties || [];
+        box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((p) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(p.reason || "未填写原因") + '<em>' + escapeHtml(p.type === "ban" ? "封禁" : "禁言") + ' · ' + escapeHtml(p.createdByName || "") + ' · ' + formatDate(p.createdAt) + ' · ' + (p.active ? "生效中" : "已结束") + '</em></span>' +
+          (p.active ? '<button class="btn btn-ghost btn-small" data-revoke="' + p.id + '">撤销</button>' : "") + '</li>').join("") + '</ul>' : '<div class="empty-inbox">暂无处罚记录。</div>';
+        box.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
+          try { await Store.adminRevokePenalty(b.getAttribute("data-revoke")); renderAdmin("penalties"); showToast("处罚已撤销"); }
+          catch (e) { showToast(e.message || "撤销失败"); }
+        }));
+      } else if (tab === "files") {
+        const r = await Store.adminFiles();
+        const list = r.files || [];
+        box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((f) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(f.name) + '<em>' + escapeHtml(f.topicTitle || "未知项目") + ' · ' + escapeHtml(f.uploaderName || "") + ' · ' + formatSize(f.size) + '</em></span><button class="btn btn-danger btn-small" data-file-delete="' + f.id + '">删除文件</button></li>').join("") + '</ul>' : '<div class="empty-inbox">暂无共享文件。</div>';
+        box.querySelectorAll("[data-file-delete]").forEach((b) => b.addEventListener("click", async () => {
+          if (!window.confirm("确认删除这个文件？删除后无法恢复。")) return;
+          try { await Store.adminDeleteFile(b.getAttribute("data-file-delete")); renderAdmin("files"); showToast("文件已删除"); }
+          catch (e) { showToast(e.message || "删除失败"); }
+        }));
+      } else if (tab === "logs") {
+        const r = await Store.adminAudit();
+        const logs = r.logs || [];
+        box.innerHTML = logs.length ? '<ul class="admin-list admin-log-list">' + logs.map((x) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(x.action || "操作") + '<em>' + escapeHtml(x.targetType || "") + ' ' + escapeHtml(x.targetId || "") + ' · ' + formatDate(x.at) + '</em></span><span class="admin-meta">' + escapeHtml(x.actorName || x.actorId || "") + '</span></li>').join("") + '</ul>' : '<div class="empty-inbox">暂无审计日志。</div>';
       } else {
-        const r = await Store.topics();
+        const r = await Store.adminTopics();
         const topics = r.topics || [];
         box.innerHTML = topics.length ? '<ul class="admin-list">' + topics.map((t) =>
-          '<li class="admin-row"><span class="admin-name">' + escapeHtml(t.title) + '<em>负责人：' + escapeHtml(t.members[0] ? t.members[0].nickname : "—") + ' · 编号 ' + escapeHtml(t.code || "—") + ' · ' + t.members.length + '/' + t.limit + '</em></span>' +
+          '<li class="admin-row"><span class="admin-name">' + escapeHtml(t.title) + '<em>' + escapeHtml(t.type === "private" ? "私密话题" : "公开话题") + ' · 编号 ' + escapeHtml(t.code || "—") + ' · ' + Number(t.memberCount || 0) + '/' + Number(t.limit || 0) + ' 人 · ' + escapeHtml(PROJECT_STATUS_LABELS[t.status] || t.status || "招集中") + '</em></span>' +
           '<button class="btn btn-danger btn-small" data-admin-delete="' + t.id + '">删除项目</button></li>').join("") + '</ul>'
           : '<div class="empty-inbox">现在还没有任何项目。</div>';
         box.querySelectorAll("[data-admin-delete]").forEach((b) => b.addEventListener("click", () => {
@@ -1109,6 +1817,7 @@ resetButton.addEventListener("click", () => {
   /* ================= 视图切换 ================= */
   function showPlaza() {
     currentTopicId = null;
+    window.currentProjectId = null;
     state.replyTo = null;
     const side = $("#chat-side");
     if (side) side.classList.remove("is-open");
@@ -1117,12 +1826,14 @@ resetButton.addEventListener("click", () => {
     $("#view-plaza").hidden = false;
     $("#view-chat").hidden = true;
     renderPlaza();
+    if (window.ProjectHubAgent) window.ProjectHubAgent.init({ projectId: null });
   }
 
   async function openChat(topicId) {
     const topic = state.topics.find((t) => t.id === topicId);
     if (!topic) return;
     currentTopicId = topicId;
+    window.currentProjectId = topicId;
     state.replyTo = null;
     const side = $("#chat-side");
     if (side) side.classList.remove("is-open");
@@ -1130,8 +1841,9 @@ resetButton.addEventListener("click", () => {
     if (picker) picker.hidden = true;
     $("#view-plaza").hidden = true;
     $("#view-chat").hidden = false;
-    await Promise.all([loadMessages(topicId), loadFiles(topicId), loadAi(topicId)]);
+    await Promise.all([loadMessages(topicId), loadFiles(topicId)]);
     renderChat(topicId);
+    if (window.ProjectHubAgent) window.ProjectHubAgent.init({ projectId: topicId });
   }
 
   async function loadMessages(topicId) {
@@ -1279,18 +1991,14 @@ resetButton.addEventListener("click", () => {
     if (!topic) return;
     const canManage = isLeader(topic);
 
-    renderAnnouncement(topic);
-    renderAiPanel(topic);
     renderReplyBar();
 
     $("#chat-title").textContent = topic.title;
     const typeText = topic.type === "public" ? ("公开话题 · 申请需要 " + (requiredLabels(topic) || "不限")) : "私密话题 · 需要 6 位密码";
-    $("#chat-meta").innerHTML = escapeHtml(typeText) + " · " + escapeHtml(topicDirectionLabel(topic)) + " · <span class='mono'>" + topic.members.length + "/" + topic.limit + "</span>";
+    const owner = topic.members.find((m) => m.id === topic.creatorId);
+    $("#chat-meta").innerHTML = escapeHtml(typeText) + " · " + escapeHtml(topicDirectionLabel(topic)) + " · 负责人：" + escapeHtml(owner ? owner.nickname : "—") + " · <span class='mono'>" + topic.members.length + "/" + topic.limit + "</span>";
+    const descriptionEl = $("#chat-description"); if (descriptionEl) descriptionEl.textContent = "项目简介：" + (topic.desc || "暂无简介");
     $("#chat-member-count").textContent = topic.members.length + "/" + topic.limit;
-
-    const ai = state.ai[topic.id];
-    const aiBtn = $("#btn-ai-panel");
-    if (aiBtn) aiBtn.hidden = !(ai && (ai.enabled || canManage));
 
     const vibeEl = $("#chat-vibe");
     if (vibeEl) vibeEl.textContent = "组内氛围：" + (topic.vibe || "负责人还没有填写");
@@ -1302,6 +2010,37 @@ resetButton.addEventListener("click", () => {
       : "";
     const rolesEl = $("#chat-roles");
     if (rolesEl) { rolesEl.textContent = rolesInfo; rolesEl.hidden = !rolesInfo; }
+    const status = topic.status || "recruiting";
+    const statusEl = $("#chat-project-status");
+    if (statusEl) statusEl.innerHTML = `项目状态：<strong class="status-pill status-${escapeHtml(status)}">${escapeHtml(PROJECT_STATUS_LABELS[status] || status)}</strong> · 创建：${escapeHtml(formatDate(topic.createdAt))} · 更新：${escapeHtml(formatDate(topic.updatedAt || topic.statusAt || topic.createdAt))}`;
+    const ownerControls = $("#owner-controls");
+    if (ownerControls) {
+      if (!canManage) { ownerControls.hidden = true; ownerControls.innerHTML = ""; }
+      else {
+        const nextStatuses = PROJECT_STATUS_NEXT[status] || [];
+        const transferable = topic.members.filter((m) => m.id !== topic.creatorId);
+        ownerControls.hidden = false;
+        ownerControls.innerHTML = '<h3 class="side-title">负责人操作</h3>' +
+          (nextStatuses.length ? '<div class="owner-status-actions">' + nextStatuses.map((next) => '<button class="btn btn-quiet btn-small" type="button" data-project-status="' + next + '">设为' + escapeHtml(PROJECT_STATUS_LABELS[next] || next) + '</button>').join("") + '</div>' : '') +
+          (transferable.length ? '<div class="owner-transfer"><select class="select js-owner-select"><option value="">选择新负责人</option>' + transferable.map((m) => '<option value="' + m.id + '">' + escapeHtml(m.nickname || "成员") + '</option>').join("") + '</select><button class="btn btn-danger btn-small" type="button" data-owner-transfer>转移负责人</button></div>' : '');
+        ownerControls.querySelectorAll("[data-project-status]").forEach((btn) => btn.addEventListener("click", async () => {
+          const next = btn.getAttribute("data-project-status");
+          btn.disabled = true;
+          try { await Store.setProjectStatus(topic.id, next); await refreshTopicList(); await refreshAll(); showToast("项目状态已更新为「" + (PROJECT_STATUS_LABELS[next] || next) + "」"); }
+          catch (e) { btn.disabled = false; showToast(e.message || "状态更新失败"); }
+        }));
+        const ownerBtn = ownerControls.querySelector("[data-owner-transfer]");
+        if (ownerBtn) ownerBtn.addEventListener("click", async () => {
+          const select = ownerControls.querySelector(".js-owner-select");
+          const userId = select && select.value;
+          if (!userId) { showToast("请先选择新负责人"); return; }
+          if (!window.confirm("确认将负责人转移给这位成员？转移后你将失去负责人权限。")) return;
+          ownerBtn.disabled = true;
+          try { await Store.transferOwner(topic.id, userId); await refreshTopicList(); await refreshAll(); showToast("负责人已转移"); }
+          catch (e) { ownerBtn.disabled = false; showToast(e.message || "转移失败"); }
+        });
+      }
+    }
     const uploadWrap = $("#file-upload-wrap");
     if (uploadWrap) uploadWrap.hidden = !(isMember(topic) || isAdmin());
     const removeBtn = $("#btn-delete-topic");
@@ -1336,6 +2075,10 @@ resetButton.addEventListener("click", () => {
     });
 
     renderFileList(topic);
+    renderTaskList(topic);
+    renderResourceList(topic);
+    renderActivityList(topic);
+    const outcomeBtn = $("#btn-outcome"); if (outcomeBtn) { outcomeBtn.hidden = false; outcomeBtn.onclick = () => openOutcomeModal(topic); }
 
     const box = $("#chat-messages");
     box.innerHTML = "";
@@ -1349,6 +2092,102 @@ resetButton.addEventListener("click", () => {
       });
     }
     box.scrollTop = box.scrollHeight;
+  }
+
+  function renderActivityList(topic) {
+    const listEl = $("#activity-list"); if (!listEl) return;
+    const items = topic.activities || [];
+    listEl.innerHTML = items.length ? items.map((item) => '<li class="activity-item"><strong>' + escapeHtml(item.actorName || "系统") + '</strong><span>' + escapeHtml(item.text || "") + '</span><time>' + escapeHtml(formatDate(item.at)) + '</time></li>').join("") : '<li class="activity-empty">还没有项目动态。</li>';
+  }
+
+  function renderResourceList(topic) {
+    const listEl = $("#resource-list"); if (!listEl) return;
+    const items = topic.resources || [];
+    listEl.innerHTML = items.length ? items.map((item) => { const body = item.kind === "link" ? '<a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener">' + escapeHtml(item.title) + '</a>' : '<strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.content || "") + '</p>'; return '<li class="resource-item">' + body + '<small>' + escapeHtml(item.creatorName || "") + ' · ' + escapeHtml(formatDate(item.createdAt)) + '</small><button class="btn btn-quiet btn-small" type="button" data-resource-delete="' + item.id + '">删除</button></li>'; }).join("") : '<li class="resource-empty">还没有笔记或链接。</li>';
+    listEl.querySelectorAll("[data-resource-delete]").forEach((btn) => btn.addEventListener("click", async () => { if (!window.confirm("确认删除这条资料？")) return; try { await Store.deleteResource(topic.id, btn.getAttribute("data-resource-delete")); await refreshTopicList(); renderChat(topic.id); showToast("资料已删除"); } catch (e) { showToast(e.message || "删除失败"); } }));
+  }
+
+  function openResourceModal(topic, kind) {
+    const isLink = kind === "link";
+    showModal('<h2 class="modal-title">' + (isLink ? "添加外部链接" : "添加项目笔记") + '</h2><div class="field"><label>标题</label><input class="input js-resource-title" maxlength="80"></div>' + (isLink ? '<div class="field"><label>链接</label><input class="input js-resource-url" type="url" placeholder="https://"></div>' : '<div class="field"><label>内容</label><textarea class="textarea js-resource-content" maxlength="5000"></textarea></div>') + '<p class="form-error js-resource-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-resource-save>保存</button></div>', true);
+    modalContent.querySelector("[data-resource-save]").addEventListener("click", async () => { const title = modalContent.querySelector(".js-resource-title").value.trim(); const url = isLink ? modalContent.querySelector(".js-resource-url").value.trim() : ""; const content = isLink ? "" : modalContent.querySelector(".js-resource-content").value.trim(); try { await Store.createResource(topic.id, { kind: kind, title: title, url: url, content: content }); hideModal(); await refreshTopicList(); renderChat(topic.id); showToast("资料已保存"); } catch (e) { const err = modalContent.querySelector(".js-resource-error"); err.textContent = e.message || "保存失败"; err.hidden = false; } });
+  }
+
+  function openOutcomeModal(topic) {
+    const editable = isLeader(topic);
+    const value = topic.outcome || {};
+    const links = (value.links || []).map((x) => '<a href="' + escapeHtml(x.url || "#") + '" target="_blank" rel="noopener">' + escapeHtml(x.label || x.url || "成果链接") + '</a>').join(" · ");
+    if (!editable) {
+      const memberHtml = (topic.members || []).map((m) => '<li>' + escapeHtml(m.nickname || "成员") + (m.tag ? ' · ' + escapeHtml(m.tag) : "") + '</li>').join("") || '<li>暂无成员信息</li>';
+      const fileItems = (state.files[topic.id] || []).map((f) => '<li>' + escapeHtml(f.name || "项目文件") + '</li>').join("") || '<li>暂无项目文件</li>';
+      const outcomeText = value.final || value.process || value.summary || "暂无项目成果";
+      showModal(
+        '<h2 class="modal-title">项目成果</h2><p class="modal-sub">' + escapeHtml(topic.title) + '</p>' +
+        '<div class="outcome-view"><h3>项目简介</h3><p>' + escapeHtml(value.summary || topic.desc || "暂无项目简介") + '</p>' +
+        '<h3>团队成员</h3><ul>' + memberHtml + '</ul>' +
+        '<h3>项目方向</h3><p>' + escapeHtml(topicDirectionLabel(topic) || "暂未设置研究方向") + '</p>' +
+        '<h3>项目状态</h3><p>' + escapeHtml(PROJECT_STATUS_LABELS[topic.status] || topic.status || "未设置") + '</p>' +
+        '<h3>项目文件</h3><ul>' + fileItems + '</ul>' +
+        '<h3>项目成果</h3><p>' + escapeHtml(outcomeText) + '</p>' +
+        '<h3>成果链接</h3><p>' + (links || "暂无成果链接") + '</p>' +
+        '<h3>获奖信息</h3><p>' + escapeHtml(value.awards || "暂无获奖信息") + '</p></div>', true);
+      return;
+    }
+    const linkText = (value.links || []).map((x) => x.label + ' | ' + x.url).join("\n");
+    showModal('<h2 class="modal-title">编辑项目成果</h2><p class="modal-sub">没有填写的内容会保留为“暂无项目成果”。</p><div class="field"><label>项目简介</label><textarea class="textarea js-outcome-summary" maxlength="1000">' + escapeHtml(value.summary || topic.desc || "") + '</textarea></div><div class="field"><label>项目过程</label><textarea class="textarea js-outcome-process" maxlength="5000">' + escapeHtml(value.process || "") + '</textarea></div><div class="field"><label>最终成果</label><textarea class="textarea js-outcome-final" maxlength="5000">' + escapeHtml(value.final || "") + '</textarea></div><div class="field"><label>成果链接（每行：名称 | URL）</label><textarea class="textarea js-outcome-links" maxlength="5000">' + escapeHtml(linkText) + '</textarea></div><div class="field"><label>获奖信息（可选）</label><input class="input js-outcome-awards" maxlength="1000" value="' + escapeHtml(value.awards || "") + '"></div><p class="form-error js-outcome-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-outcome-save>保存成果</button></div>', true);
+    modalContent.querySelector("[data-outcome-save]").addEventListener("click", async () => {
+      const linkValues = modalContent.querySelector(".js-outcome-links").value.split("\n").map((line) => { const i = line.indexOf("|"); return i < 0 ? null : { label: line.slice(0, i).trim(), url: line.slice(i + 1).trim() }; }).filter(Boolean);
+      try {
+        await Store.saveOutcome(topic.id, { summary: modalContent.querySelector(".js-outcome-summary").value, process: modalContent.querySelector(".js-outcome-process").value, final: modalContent.querySelector(".js-outcome-final").value, links: linkValues, awards: modalContent.querySelector(".js-outcome-awards").value });
+        hideModal(); await refreshTopicList(); const latest = state.topics.find((t) => t.id === topic.id); if (latest) renderChat(topic.id); showToast("项目成果已保存");
+      } catch (e) { const err = modalContent.querySelector(".js-outcome-error"); err.textContent = e.message || "保存失败"; err.hidden = false; }
+    });
+  }
+
+  function taskDateInput(value) {
+    if (!value) return "";
+    const date = new Date(Number(value));
+    if (Number.isNaN(date.getTime())) return "";
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  function openTaskModal(topic, task) {
+    const editing = !!task;
+    const owner = isLeader(topic);
+    const assigneeId = (task && task.assigneeId) || (state.user && state.user.id) || "";
+    const memberOptions = topic.members.map((m) => '<option value="' + m.id + '"' + (m.id === assigneeId ? " selected" : "") + '>' + escapeHtml(m.nickname || "成员") + '</option>').join("");
+    const html = '<h2 class="modal-title">' + (editing ? "编辑任务" : "新建任务") + '</h2>' +
+      '<div class="field"><label>任务标题</label><input class="input js-task-title" maxlength="80" value="' + escapeHtml(task ? task.title : "") + '" placeholder="例如：整理数据集"></div>' +
+      '<div class="field"><label>任务说明</label><textarea class="textarea js-task-desc" maxlength="500" placeholder="写清楚交付内容">' + escapeHtml(task ? task.desc : "") + '</textarea></div>' +
+      '<div class="form-row"><div class="field"><label>负责人</label><select class="select js-task-assignee"' + (owner ? "" : " disabled") + '>' + memberOptions + '</select></div>' +
+      '<div class="field"><label>截止时间</label><input class="input js-task-due" type="datetime-local" value="' + taskDateInput(task && task.dueAt) + '"></div></div>' +
+      '<div class="form-row"><div class="field"><label>优先级</label><select class="select js-task-priority">' + Object.keys(TASK_PRIORITY_LABELS).map((k) => '<option value="' + k + '"' + ((task && task.priority === k) || (!task && k === "medium") ? " selected" : "") + '>' + TASK_PRIORITY_LABELS[k] + '</option>').join("") + '</select></div>' +
+      '<div class="field"><label>状态</label><select class="select js-task-status">' + Object.keys(TASK_STATUS_LABELS).filter((k) => k !== "overdue").map((k) => '<option value="' + k + '"' + ((task && task.status === k) || (!task && k === "todo") ? " selected" : "") + '>' + TASK_STATUS_LABELS[k] + '</option>').join("") + '</select></div></div>' +
+      '<p class="form-error js-task-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-task-save>' + (editing ? "保存任务" : "创建任务") + '</button></div>';
+    showModal(html, true);
+    const box = modalContent;
+    box.querySelector("[data-task-save]").addEventListener("click", async () => {
+      const payload = { clientId: editing ? undefined : makeClientId(), title: box.querySelector(".js-task-title").value.trim(), desc: box.querySelector(".js-task-desc").value.trim(), assigneeId: owner ? box.querySelector(".js-task-assignee").value : assigneeId, dueAt: box.querySelector(".js-task-due").value ? new Date(box.querySelector(".js-task-due").value).getTime() : 0, priority: box.querySelector(".js-task-priority").value, status: box.querySelector(".js-task-status").value };
+      const btn = box.querySelector("[data-task-save]"); btn.disabled = true; btn.textContent = "保存中…";
+      try { if (editing) await Store.updateTask(topic.id, task.id, payload); else await Store.createTask(topic.id, payload); hideModal(); await refreshTopicList(); const latest = state.topics.find((t) => t.id === topic.id); if (latest) renderChat(topic.id); showToast(editing ? "任务已更新" : "任务已创建"); }
+      catch (e) { btn.disabled = false; btn.textContent = editing ? "保存任务" : "创建任务"; const err = box.querySelector(".js-task-error"); err.textContent = e.message || "保存失败"; err.hidden = false; }
+    });
+  }
+
+  function renderTaskList(topic) {
+    const listEl = $("#task-list");
+    if (!listEl) return;
+    const tasks = topic.tasks || [];
+    const createBtn = $("#task-create");
+    if (createBtn) { createBtn.hidden = !isLeader(topic); createBtn.onclick = () => openTaskModal(topic, null); }
+    const count = $("#task-count"); if (count) count.textContent = tasks.length ? "(" + tasks.length + ")" : "";
+    listEl.innerHTML = tasks.length ? tasks.map((task) => {
+      const canEdit = isLeader(topic) || (state.user && task.assigneeId === state.user.id);
+      const due = task.dueAt ? formatDate(task.dueAt) : "无截止时间";
+      return '<li class="task-item"><div class="task-line"><strong>' + escapeHtml(task.title) + '</strong><span class="task-status task-status-' + escapeHtml(task.status) + '">' + escapeHtml(TASK_STATUS_LABELS[task.status] || task.status) + '</span></div>' + '<div class="task-meta">' + escapeHtml(task.assigneeName || "未指定") + ' · ' + escapeHtml(TASK_PRIORITY_LABELS[task.priority] || task.priority) + ' · ' + escapeHtml(due) + '</div>' + (canEdit ? '<div class="task-actions"><button class="btn btn-quiet btn-small" type="button" data-task-edit="' + task.id + '">编辑</button>' + (isLeader(topic) ? '<button class="btn btn-danger btn-small" type="button" data-task-delete="' + task.id + '">删除</button>' : "") + '</div>' : "") + '</li>';
+    }).join("") : '<li class="task-empty">还没有任务。</li>';
+    listEl.querySelectorAll("[data-task-edit]").forEach((btn) => btn.addEventListener("click", () => { const task = tasks.find((x) => x.id === btn.getAttribute("data-task-edit")); if (task) openTaskModal(topic, task); }));
+    listEl.querySelectorAll("[data-task-delete]").forEach((btn) => btn.addEventListener("click", async () => { if (!window.confirm("确认删除这个任务？")) return; try { await Store.deleteTask(topic.id, btn.getAttribute("data-task-delete")); await refreshTopicList(); renderChat(topic.id); showToast("任务已删除"); } catch (e) { showToast(e.message || "删除失败"); } }));
   }
 
   function renderFileList(topic) {
@@ -1487,7 +2326,7 @@ resetButton.addEventListener("click", () => {
     ev.target.value = "";
     if (!file || !currentTopicId) return;
     const ext = ("." + file.name.split(".").pop()).toLowerCase();
-    if ([".doc", ".docx", ".jpg", ".jpeg", ".png"].indexOf(ext) < 0) { showToast("只支持 Word 文档和 jpg / png 图片"); return; }
+    if ([".doc", ".docx", ".pdf", ".jpg", ".jpeg", ".png"].indexOf(ext) < 0) { showToast("只支持 Word、PDF 和 jpg / png 图片"); return; }
     if (file.size > 5 * 1024 * 1024) { showToast("文件不能超过 5MB"); return; }
     const reader = new FileReader();
     reader.onload = async () => {
@@ -1504,12 +2343,12 @@ resetButton.addEventListener("click", () => {
   }
 
   /* ================= 同步 ================= */
-  const sig = { topics: "", apps: "", inbox: "", chat: "", files: "", ai: "", notif: "" };
-  const aiOpen = {};          // 每个话题的 AI 面板是否展开
+  const sig = { topics: "", apps: "", inbox: "", chat: "", files: "", notif: "" };
   let lastNotifId = "";
 
   async function refreshAll() {
     if (!state.online) return;
+    await loadAnnouncements();
     try {
       const r = await Store.topics();
       const tj = JSON.stringify(r.topics || []);
@@ -1580,175 +2419,6 @@ resetButton.addEventListener("click", () => {
         const fj = JSON.stringify(r.files || []);
         if (fj !== sig.files) { sig.files = fj; state.files[currentTopicId] = r.files || []; renderFileList(state.topics.find((t) => t.id === currentTopicId)); }
       } catch (e) {}
-      try {
-        const r = await Store.ai(currentTopicId);
-        const aj = JSON.stringify(r.ai || {});
-        if (aj !== sig.ai) {
-          sig.ai = aj;
-          state.ai[currentTopicId] = r.ai || null;
-          const t = state.topics.find((x) => x.id === currentTopicId);
-          if (t) { renderAnnouncement(t); renderAiPanel(t); }
-        }
-      } catch (e) {}
-    }
-  }
-
-  /* ================= AI 助手 ================= */
-  async function loadAi(topicId) {
-    try { const r = await Store.ai(topicId); state.ai[topicId] = r.ai || null; }
-    catch (e) { state.ai[topicId] = state.ai[topicId] || null; }
-  }
-
-  function renderAnnouncement(topic) {
-    const el = $("#chat-announcement");
-    if (!el) return;
-    const ai = state.ai[topic.id];
-    const ann = ai && ai.announcement;
-    if (!ann) { el.hidden = true; el.innerHTML = ""; return; }
-    el.hidden = false;
-    el.innerHTML = '<span class="ann-tag">📌 项目公告' + (ann.round ? " · 第 " + ann.round + " 轮" : "") + '</span><div class="ann-text">' + escapeHtml(ann.text) + '</div>';
-  }
-
-  function renderAiPanel(topic) {
-    const panel = $("#chat-ai");
-    if (!panel) return;
-    const ai = state.ai[topic.id];
-    const owner = isLeader(topic);
-    if (!ai) { panel.hidden = true; panel.innerHTML = ""; return; }
-    if (!ai.enabled && !owner) { panel.hidden = true; panel.innerHTML = ""; return; }
-    panel.hidden = false;
-    const open = !!aiOpen[topic.id];
-    panel.classList.toggle("is-collapsed", !open);
-
-    if (!ai.enabled) {
-      panel.innerHTML = '<div class="ai-head"><span class="ai-badge">AI 助手</span><span class="ai-status">未引入</span>' +
-        (owner ? '<label class="ai-switch"><input type="checkbox" class="js-ai-toggle"> 引入 AI 助手</label>' : '') + '</div>' +
-        '<p class="ai-note">' + (owner ? "打开开关即可为这个项目引入 AI 助手。它不会主动发言，只有你点击「开始思考」时才会工作。" : "项目负责人还没有为这个项目引入 AI 助手。") + '</p>';
-      wireAiPanel(topic);
-      return;
-    }
-
-    const statusText = {
-      idle: "待命中", thinking: "正在思考…", voting: "投票中",
-      rethink: "本轮选择「再想想」", decided: "方案已通过", assigned: "深度分工已完成"
-    }[ai.status] || "待命中";
-    const src = ai.model || (ai.config && ai.config.label) || "本地演示模式";
-
-    const phaseText = {
-      ANALYZE: "分析需求", CLARIFY: "等待继续讨论", RESEARCH: "检索资料", GENERATE: "生成方案",
-      EVALUATE: "方案比较", RECOMMEND: "等待负责人确认", WAIT_FOR_LEADER: "等待负责人确认",
-      DECOMPOSE: "拆解任务", ASSIGN: "分配任务"
-    }[ai.phase] || "";
-    let summary = (phaseText ? phaseText + " · " : "") + statusText;
-    if (ai.status === "voting") summary = "投票中 · " + ai.voters + "/" + ai.totalMembers + " 人已投";
-    else if (ai.deepMine) summary = "已生成你的任务分工";
-    else if (ai.draft) summary = "已生成方案草稿与 " + Math.max(0, (ai.options || []).length - 1) + " 个方案";
-
-    let head = '<div class="ai-head"><span class="ai-badge">AI</span><span class="ai-status">' + escapeHtml(summary) + '</span>' +
-      '<span class="ai-src">' + escapeHtml(src) + '</span>' +
-      '<button class="ai-collapse" type="button" data-ai-collapse>' + (open ? "收起" : "展开") + '</button>' +
-      (owner ? '<label class="ai-switch"><input type="checkbox" class="js-ai-toggle" checked> 开启</label>' : '') +
-      '</div>';
-
-    let body = "";
-    if (owner) {
-      body += '<div class="ai-actions">' +
-        '<button class="btn btn-primary btn-small" type="button" data-ai-think' + (ai.status === "thinking" ? " disabled" : "") + '>' + (ai.status === "thinking" ? "AI 正在思考…" : "开始思考") + '</button>' +
-        (ai.status === "voting" ? '<button class="btn btn-quiet btn-small" type="button" data-ai-close>结束投票</button>' : '') +
-        (ai.canDeep ? '<button class="btn btn-danger btn-small" type="button" data-ai-deep>就是你啦！！</button>' : '') +
-        '</div>';
-    }
-    body += '<p class="ai-note">AI 不会主动提出建议，只有负责人点击「开始思考」后才会工作。' + ((ai.rounds || 0) >= 1 ? '（已完成 ' + ai.rounds + ' 轮）' : '') + '</p>';
-
-    if (ai.status === "thinking") {
-      body += '<div class="ai-thinking"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span> AI 正在读聊天记录、整理可实施的项目方案…</div>';
-    }
-
-    if (ai.draft) {
-      body += '<details class="ai-draft"><summary>查看项目方案草稿</summary><pre>' + escapeHtml(ai.draft) + '</pre></details>';
-    }
-
-    if (ai.status === "voting" && ai.options && ai.options.length) {
-      body += '<div class="ai-vote"><p class="ai-vote-title">匿名投票：选一个你最认可、最想做的方案（' + ai.voters + "/" + ai.totalMembers + ' 人已投）</p>';
-      ai.options.forEach((o) => {
-        const pct = ai.voters ? Math.round((o.votes / Math.max(1, ai.voters)) * 100) : 0;
-        const mine = ai.myVote === o.id;
-        body += '<div class="ai-option' + (mine ? " is-mine" : "") + '">' +
-          '<div class="ai-option-top"><strong>' + escapeHtml(o.title) + '</strong><span class="ai-count">' + o.votes + ' 票</span></div>' +
-          (o.desc ? '<p class="ai-option-desc">' + escapeHtml(o.desc) + '</p>' : '') +
-          (o.reason ? '<p class="ai-option-reason">推荐理由：' + escapeHtml(o.reason) + '</p>' : '') +
-          '<div class="ai-bar"><span data-w="' + pct + '"></span></div>' +
-          '<button class="btn ' + (mine ? "btn-primary" : "btn-ghost") + ' btn-small" type="button" data-ai-vote="' + o.id + '">' + (mine ? "你已投这一项" : "投这一项") + '</button>' +
-          '</div>';
-      });
-      body += '</div>';
-    }
-
-    if (ai.deepMine) {
-      body += '<div class="ai-deep"><p class="ai-deep-title">你的任务分工与建议</p>' +
-        '<p><strong>任务：</strong>' + escapeHtml(ai.deepMine.task) + '</p>' +
-        '<p class="ai-deep-sub">需要的理论基础书目</p><ul class="ai-books">' + (ai.deepMine.books || []).map((b) => '<li>' + escapeHtml(b) + '</li>').join("") + '</ul>' +
-        '<p><strong>给你的建议：</strong>' + escapeHtml(ai.deepMine.suggestion) + '</p></div>';
-    }
-    if (owner && ai.deepAll && ai.deepAll.items) {
-      body += '<details class="ai-deep-all"><summary>查看全部成员的任务分工（仅负责人可见）</summary>';
-      ai.deepAll.items.forEach((it) => {
-        body += '<div class="ai-deep-item"><p class="ai-deep-name">' + escapeHtml(it.nickname) + '</p>' +
-          '<p><strong>任务：</strong>' + escapeHtml(it.task) + '</p>' +
-          '<ul class="ai-books">' + (it.books || []).map((b) => '<li>' + escapeHtml(b) + '</li>').join("") + '</ul>' +
-          '<p><strong>建议：</strong>' + escapeHtml(it.suggestion) + '</p></div>';
-      });
-      body += '</details>';
-    }
-
-    panel.innerHTML = head + '<div class="ai-body">' + body + '</div>';
-    panel.querySelectorAll("[data-w]").forEach((el) => { try { el.style.width = el.getAttribute("data-w") + "%"; } catch (e) {} });
-    wireAiPanel(topic);
-    const collapseBtn = panel.querySelector("[data-ai-collapse]");
-    if (collapseBtn) collapseBtn.addEventListener("click", () => { aiOpen[topic.id] = !open; renderAiPanel(topic); });
-  }
-
-  function wireAiPanel(topic) {
-    const panel = $("#chat-ai");
-    const toggle = panel.querySelector(".js-ai-toggle");
-    if (toggle) toggle.addEventListener("change", () => aiAction(topic, "toggle", { enabled: toggle.checked }));
-    const think = panel.querySelector("[data-ai-think]");
-    if (think) think.addEventListener("click", () => aiAction(topic, "think"));
-    const closeBtn = panel.querySelector("[data-ai-close]");
-    if (closeBtn) closeBtn.addEventListener("click", () => aiAction(topic, "close"));
-    const deep = panel.querySelector("[data-ai-deep]");
-    if (deep) deep.addEventListener("click", () => aiAction(topic, "deep"));
-    panel.querySelectorAll("[data-ai-vote]").forEach((b) => b.addEventListener("click", () => aiAction(topic, "vote", { optionId: b.getAttribute("data-ai-vote") })));
-  }
-
-  async function aiAction(topic, action, payload) {
-    try {
-      if (action === "toggle") {
-        await Store.aiToggle(topic.id, payload.enabled);
-        showToast(payload.enabled ? "已引入 AI 助手（它不会主动发言）" : "已关闭 AI 助手");
-      } else if (action === "think") {
-        showToast("AI 开始思考，正在汇总聊天记录…");
-        await Store.aiThink(topic.id);
-        showToast("AI 已给出发展方向，请投票");
-      } else if (action === "vote") {
-        await Store.aiVote(topic.id, payload.optionId);
-        showToast("投票成功（匿名）");
-      } else if (action === "close") {
-        await Store.aiClose(topic.id);
-      } else if (action === "deep") {
-        showToast("AI 正在深度思考，为大家分配任务…");
-        await Store.aiDeep(topic.id);
-        showToast("深度分工已完成");
-      }
-      await loadAi(topic.id);
-      renderAnnouncement(topic);
-      renderAiPanel(topic);
-      const now = state.ai[topic.id];
-      if (action === "close" && now && now.announcement) showToast("方案已通过，已置顶为项目公告");
-    } catch (e) {
-      showToast(e.message || "AI 操作失败");
-      await loadAi(topic.id);
-      renderAiPanel(topic);
     }
   }
 
@@ -1784,6 +2454,39 @@ resetButton.addEventListener("click", () => {
     });
   }
 
+  /* ================= 全站公告 ================= */
+  async function loadAnnouncements() {
+    try {
+      const r = await Store.announcements();
+      state.announcements = r.announcements || [];
+      state.announcementsUnread = r.unread || 0;
+    } catch (e) {}
+    renderAnnouncementBell();
+  }
+
+  function renderAnnouncementBell() {
+    const btn = $("#btn-announcements");
+    const badge = $("#announcement-badge");
+    if (!btn || !badge) return;
+    btn.hidden = !isLogged() && !(state.announcements || []).length;
+    badge.hidden = state.announcementsUnread === 0;
+    badge.textContent = state.announcementsUnread > 99 ? "99+" : String(state.announcementsUnread || 0);
+  }
+
+  async function openAnnouncements() {
+    await loadAnnouncements();
+    const list = state.announcements || [];
+    const importanceLabel = { normal: "普通", important: "重要", security: "安全", policy: "政策" };
+    showModal('<h2 class="modal-title">全站公告</h2><p class="modal-sub">平台通知与规则更新都会显示在这里。</p>' +
+      (list.length ? '<div class="announcement-list">' + list.map((a) => '<article class="announcement-card' + (a.read ? "" : " is-unread") + '"><div class="announcement-head"><span class="announcement-tag">' + escapeHtml(importanceLabel[a.importance] || "公告") + '</span>' + (a.pinned ? '<span class="announcement-tag is-pinned">置顶</span>' : "") + '<span class="announcement-time">' + escapeHtml(formatDate(a.publishAt || a.createdAt)) + '</span></div><h3>' + escapeHtml(a.title || "公告") + '</h3><p>' + escapeHtml(a.content || "").replace(/\n/g, "<br>") + '</p><small>发布者：' + escapeHtml(a.publisherName || "平台") + '</small></article>').join("") + '</div>' : '<div class="empty-inbox">暂时没有公告。</div>') +
+      '<div class="wizard-foot"><button class="btn btn-primary" type="button" data-ann-close>已知晓</button></div>', true);
+    const box = modalContent;
+    box.querySelector("[data-ann-close]").addEventListener("click", hideModal);
+    if (isLogged() && list.some((a) => !a.read)) {
+      try { await Promise.all(list.filter((a) => !a.read).map((a) => Store.readAnnouncement(a.id))); await loadAnnouncements(); } catch (e) {}
+    }
+  }
+
   /* ================= 消息提醒（类似微信） ================= */
   async function loadNotifications() {
     if (!isLogged()) { state.notifications = []; state.unread = 0; renderBell(); return; }
@@ -1802,22 +2505,30 @@ resetButton.addEventListener("click", () => {
     btn.hidden = !isLogged();
     badge.hidden = state.unread === 0;
     badge.textContent = state.unread > 99 ? "99+" : String(state.unread);
+    if (petController && state.unread > lastPetUnread) petController.notify();
+    lastPetUnread = state.unread;
   }
 
   function openNotifications() {
     if (!isLogged()) { openAuthModal({ mode: "login" }); return; }
     const list = state.notifications || [];
-    const typeLabel = { NEW_MESSAGE: "新消息", MENTION: "@ 提醒", PROJECT_APPLICATION: "入组申请", APPLICATION_CANCELLED: "取消申请", APPLICATION_ACCEPTED: "申请通过", APPLICATION_REJECTED: "申请结果", MEMBER_REMOVED: "移出项目", FILE_UPLOADED: "新文件", PROJECT_UPDATE: "项目公告", TASK_ASSIGNMENT: "任务分配", REPORT_CREATED: "举报", SYSTEM_NOTIFICATION: "系统通知", message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
+    const typeLabel = { NEW_MESSAGE: "新消息", MENTION: "@ 提醒", PROJECT_APPLICATION: "入组申请", APPLICATION_CANCELLED: "取消申请", APPLICATION_ACCEPTED: "申请通过", APPLICATION_REJECTED: "申请结果", MEMBER_REMOVED: "移出项目", FILE_UPLOADED: "新文件", PROJECT_UPDATE: "项目公告", TASK_ASSIGNMENT: "任务分配", REPORT_CREATED: "举报", SYSTEM_NOTIFICATION: "系统通知", ANNOUNCEMENT: "全站公告", SECURITY: "安全提醒", PROJECT_STATUS: "项目状态", OWNER_TRANSFER: "负责人转移", APPEAL_RESULT: "申诉结果", PENALTY_APPLIED: "处罚通知", REPORT_HANDLED: "举报处理", message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
     showModal('<h2 class="modal-title">消息提醒</h2><p class="modal-sub">有人发消息、@ 你，或者项目有变化时，会在这里提醒你。</p>' +
       (list.length ? '<ul class="msg-list">' + list.map((n) =>
         '<li class="msg-row bell-row" data-notif="' + n.id + '" data-topic="' + (n.topicId || "") + '">' +
-        '<span class="msg-avatar">' + (n.from ? escapeHtml(n.from.slice(0, 1)) : "🔔") + '</span>' +
+        '<span class="msg-avatar">' + (n.from ? escapeHtml(n.from.slice(0, 1)) : faIcon("bell", "msg-avatar-icon")) + '</span>' +
         '<div class="msg-body"><div class="msg-head">' + (n.read ? "" : '<span class="bell-unread"></span>') + '<strong>' + escapeHtml(n.from || "系统") + '</strong>' +
         '<span class="msg-sub">' + escapeHtml(typeLabel[n.type] || "通知") + " · " + formatDate(n.at) + '</span></div>' +
         '<p class="msg-text">' + escapeHtml(n.text || "") + '</p>' +
         (n.topicTitle ? '<p class="msg-quote">来自《' + escapeHtml(n.topicTitle) + '》</p>' : "") +
+        (n.type === "PENALTY_APPLIED" ? '<div class="msg-actions"><button class="btn btn-quiet btn-small" type="button" data-appeal="' + n.id + '">提交申诉</button></div>' : "") +
         '</div></li>').join("") + '</ul>' : '<div class="empty-inbox">还没有新消息。<br>有人给你发消息或 @ 你时，这里会出现提醒。</div>'), true);
     const box = modalContent;
+    box.querySelectorAll("[data-appeal]").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const n = list.find((x) => x.id === b.getAttribute("data-appeal"));
+      if (n) openAppealModal(n);
+    }));
     box.querySelectorAll("[data-notif]").forEach((row) => row.addEventListener("click", async () => {
       const topicId = row.getAttribute("data-topic");
       hideModal();
@@ -1833,9 +2544,39 @@ resetButton.addEventListener("click", () => {
     Store.readNotifications({ all: true }).then(() => loadNotifications()).catch(() => {});
   }
 
+  function openAppealModal(notification) {
+    const penaltyType = String(notification.text || "").includes("封禁") ? "ban" : "mute";
+    showModal('<h2 class="modal-title">提交申诉</h2><p class="modal-sub">申诉会提交给平台管理员。请说明处罚有误的原因。</p>' +
+      '<div class="field"><label>处罚类型</label><input class="input" type="text" value="' + (penaltyType === "ban" ? "封禁" : "禁言") + '" readonly></div>' +
+      '<div class="field"><label>申诉理由</label><textarea class="textarea js-appeal-reason" maxlength="500" placeholder="例如：处罚有误，请复核"></textarea></div>' +
+      '<p class="form-error js-appeal-error" hidden></p>' +
+      '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-cancel>取消</button><button class="btn btn-primary" type="button" data-submit>提交申诉</button></div>', true);
+    const box = modalContent;
+    box.querySelector("[data-cancel]").addEventListener("click", hideModal);
+    box.querySelector("[data-submit]").addEventListener("click", async () => {
+      const reason = box.querySelector(".js-appeal-reason").value.trim();
+      const err = box.querySelector(".js-appeal-error");
+      if (!reason) { err.textContent = "请填写申诉理由"; err.hidden = false; return; }
+      const btn = box.querySelector("[data-submit]");
+      btn.disabled = true; btn.textContent = "正在提交…";
+      try { await Store.createAppeal({ penaltyType: penaltyType, reason: reason }); hideModal(); showToast("申诉已提交，管理员会尽快处理"); }
+      catch (e) { btn.disabled = false; btn.textContent = "提交申诉"; err.textContent = e.message || "提交失败"; err.hidden = false; }
+    });
+  }
+
   /* ================= 事件与启动 ================= */
   function bindEvents() {
     $("#search-input").addEventListener("input", (e) => { state.search = e.target.value; renderTopicGrid(); });
+    const heroCreate = $("#hero-create");
+    if (heroCreate) heroCreate.addEventListener("click", () => { if (!isLogged()) { openAuthModal({ mode: "register", onDone: openLeaderFlow }); return; } openLeaderFlow(); });
+    const heroExplore = $("#hero-explore");
+    if (heroExplore) heroExplore.addEventListener("click", () => document.querySelector(".plaza-body")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    const categoryFilter = $("#category-filter");
+    if (categoryFilter) categoryFilter.addEventListener("change", () => { state.categoryFilter = categoryFilter.value; renderTopicGrid(); });
+    const statusFilter = $("#status-filter");
+    if (statusFilter) statusFilter.addEventListener("change", () => { state.statusFilter = statusFilter.value; renderTopicGrid(); });
+    const recruitingFilter = $("#recruiting-filter");
+    if (recruitingFilter) recruitingFilter.addEventListener("click", () => { state.recruitingOnly = !state.recruitingOnly; recruitingFilter.classList.toggle("is-on", state.recruitingOnly); renderTopicGrid(); });
     $("#btn-switch").addEventListener("click", openRoleModal);
     $("#btn-theme").addEventListener("click", showThemeChooser);
     $("#btn-create").addEventListener("click", () => { if (!isLogged()) { openAuthModal({ mode: "register", onDone: openLeaderFlow }); return; } openLeaderFlow(); });
@@ -1845,12 +2586,16 @@ resetButton.addEventListener("click", () => {
       clearSession();
       if (sseSource) { try { sseSource.close(); } catch (e) {} sseSource = null; }
       renderPlaza();
+      window.currentProjectId = null;
+      if (window.ProjectHubAgent) window.ProjectHubAgent.init({ projectId: null });
       showToast("已退出登录");
       openRoleModal();
     });
     $("#btn-inbox").addEventListener("click", openInboxModal);
     const bell = $("#btn-bell");
     if (bell) bell.addEventListener("click", openNotifications);
+    const announcementsBtn = $("#btn-announcements");
+    if (announcementsBtn) announcementsBtn.addEventListener("click", openAnnouncements);
     window.addEventListener("online", () => { flushOutbox(); });
     const reportBtn = $("#btn-report");
     if (reportBtn) reportBtn.addEventListener("click", () => {
@@ -1861,13 +2606,6 @@ resetButton.addEventListener("click", () => {
     if (sideBtn) sideBtn.addEventListener("click", () => $("#chat-side").classList.add("is-open"));
     const sideClose = $("#btn-side-close");
     if (sideClose) sideClose.addEventListener("click", () => $("#chat-side").classList.remove("is-open"));
-    const aiBtn = $("#btn-ai-panel");
-    if (aiBtn) aiBtn.addEventListener("click", () => {
-      if (!currentTopicId) return;
-      aiOpen[currentTopicId] = !aiOpen[currentTopicId];
-      const t = state.topics.find((x) => x.id === currentTopicId);
-      if (t) renderAiPanel(t);
-    });
     const mentionBtn = $("#btn-mention");
     if (mentionBtn) mentionBtn.addEventListener("click", () => renderMentionPicker($("#mention-picker").hidden));
     const chatInput = $("#chat-input");
@@ -1877,6 +2615,8 @@ resetButton.addEventListener("click", () => {
     $("#chat-form").addEventListener("submit", sendMessage);
     const fileInput = $("#file-input");
     if (fileInput) fileInput.addEventListener("change", handleFilePick);
+    const resourceNote = $("#resource-note"); if (resourceNote) resourceNote.addEventListener("click", () => { const topic = state.topics.find((t) => t.id === currentTopicId); if (topic) openResourceModal(topic, "note"); });
+    const resourceLink = $("#resource-link"); if (resourceLink) resourceLink.addEventListener("click", () => { const topic = state.topics.find((t) => t.id === currentTopicId); if (topic) openResourceModal(topic, "link"); });
     const emptyCreate = $("#empty-create-btn");
     if (emptyCreate) emptyCreate.addEventListener("click", () => { if (!isLogged()) { openAuthModal({ mode: "register", onDone: openLeaderFlow }); return; } openLeaderFlow(); });
     const sideDelete = $("#btn-delete-topic");
@@ -1884,8 +2624,9 @@ resetButton.addEventListener("click", () => {
       const topic = state.topics.find((t) => t.id === currentTopicId);
       if (topic) openDeleteModal(topic);
     });
-    modalClose.addEventListener("click", () => { if (modalClosable) hideModal(); });
+    modalClose.addEventListener("click", hideModal);
     modalOverlay.addEventListener("click", (e) => { if (e.target === modalOverlay && modalClosable) hideModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalOverlay && !modalOverlay.hidden && modalClosable) hideModal(); });
   }
 
   /* SSE：先用会话 Token 换取一次性短期票据，票据放进 URL 只用于建立连接 */
@@ -1903,9 +2644,9 @@ resetButton.addEventListener("click", () => {
     try {
       const r = await Store.sseTicket();
       if (sseSource) { try { sseSource.close(); } catch (e) {} }
-      const es = new EventSource("api/events?ticket=" + encodeURIComponent(r.ticket));
+      const es = new EventSource("/api/events?ticket=" + encodeURIComponent(r.ticket));
       sseSource = es;
-      ["topics", "message", "applications", "files", "ai", "notify"].forEach((ev) => es.addEventListener(ev, refreshAll));
+      ["topics", "message", "applications", "files", "notify", "announcements"].forEach((ev) => es.addEventListener(ev, refreshAll));
       es.addEventListener("error", () => {
         try { es.close(); } catch (e) {}
         sseSource = null;
@@ -1918,37 +2659,150 @@ resetButton.addEventListener("click", () => {
     }
   }
 
+
+  function createPetController() {
+    const root = document.getElementById("projecthub-pet");
+    if (!root) return null;
+    const bubble = root.querySelector(".pet-bubble");
+    const image = root.querySelector("img");
+    if (!bubble || !image) return null;
+
+    const messages = [
+      "今天也要一起把项目做出来。",
+      "需要我帮你看着进度吗？",
+      "有新消息时我会提醒你。",
+      "记得把想法写下来，再做下一步。",
+      "先休息一会儿，回来继续。",
+      "我来陪你把这个项目推进一步。"
+    ];
+    let stateTimer = null;
+    let bubbleTimer = null;
+    let dragState = null;
+    let moved = false;
+
+    const setState = (next, duration) => {
+      if (stateTimer) clearTimeout(stateTimer);
+      root.dataset.state = next;
+      if (duration) stateTimer = setTimeout(() => { root.dataset.state = "idle"; stateTimer = null; }, duration);
+    };
+    const pulse = (next, duration) => setState(next, duration || 800);
+    const say = (text) => {
+      if (bubbleTimer) clearTimeout(bubbleTimer);
+      bubble.textContent = text;
+      bubble.hidden = false;
+      bubbleTimer = setTimeout(() => { bubble.hidden = true; bubbleTimer = null; }, 2600);
+    };
+    const clampPosition = () => {
+      const rect = root.getBoundingClientRect();
+      const left = Math.max(8, Math.min(window.innerWidth - rect.width - 8, rect.left));
+      const top = Math.max(8, Math.min(window.innerHeight - rect.height - 8, rect.top));
+      if (root.style.left || root.style.top) { root.style.left = left + "px"; root.style.top = top + "px"; }
+    };
+    const savePosition = () => {
+      try { const rect = root.getBoundingClientRect(); localStorage.setItem("projecthub_pet_position_v1", JSON.stringify({ left: rect.left, top: rect.top })); } catch (e) {}
+    };
+    const restorePosition = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("projecthub_pet_position_v1") || "null");
+        if (!saved || !Number.isFinite(saved.left) || !Number.isFinite(saved.top)) return;
+        root.style.left = saved.left + "px"; root.style.top = saved.top + "px"; root.style.right = "auto"; root.style.bottom = "auto"; clampPosition();
+      } catch (e) {}
+    };
+
+    root.addEventListener("pointerenter", () => { if (!dragState && root.dataset.state === "idle") setState("hover"); });
+    root.addEventListener("pointerleave", () => { if (!dragState && root.dataset.state === "hover") setState("idle"); });
+    root.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      const rect = root.getBoundingClientRect();
+      dragState = { id: e.pointerId, startX: e.clientX, startY: e.clientY, left: rect.left, top: rect.top };
+      moved = false; root.classList.add("is-dragging"); try { root.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    root.addEventListener("pointermove", (e) => {
+      if (!dragState || dragState.id !== e.pointerId) return;
+      const dx = e.clientX - dragState.startX, dy = e.clientY - dragState.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+      root.style.left = dragState.left + dx + "px"; root.style.top = dragState.top + dy + "px"; root.style.right = "auto"; root.style.bottom = "auto"; clampPosition();
+    });
+    root.addEventListener("pointerup", (e) => {
+      if (!dragState || dragState.id !== e.pointerId) return;
+      root.classList.remove("is-dragging"); try { root.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (moved) savePosition(); else { pulse("click", 720); say(messages[Math.floor(Math.random() * messages.length)]); }
+      dragState = null;
+    });
+    root.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pulse("click", 720); say(messages[Math.floor(Math.random() * messages.length)]); }
+    });
+    root.addEventListener("dblclick", () => { pulse("sleep", 1800); say("让我打个盹."); });
+    window.addEventListener("resize", clampPosition);
+    restorePosition();
+
+    const api = {
+      pulse: pulse,
+      loading: () => pulse("loading", 1000),
+      success: () => pulse("success", 1000),
+      error: () => pulse("error", 900),
+      notify: () => pulse("notify", 1200),
+      music: () => setState("music", 0),
+      idle: () => setState("idle", 0),
+      happy: () => pulse("success", 1000),
+      react: (message) => {
+        if (/失败|错误|无法|不存在|权限|不正确/.test(String(message || ""))) pulse("error", 900);
+        else pulse("success", 900);
+      }
+    };
+    window.ProjectHubPet = api;
+    return api;
+  }
+
+  function syncTopbarHeight() {
+    const topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    document.documentElement.style.setProperty('--topbar-h', Math.ceil(topbar.getBoundingClientRect().height) + 'px');
+  }
+
   async function init() {
+    const sharedProjectMatch = location.pathname.match(/^\/project\/([^/]+)\/?$/);
+    const sharedProjectId = sharedProjectMatch ? decodeURIComponent(sharedProjectMatch[1]) : "";
+    petController = createPetController();
+    dynamicBackground.init();
+    dynamicBackground.setRenderer(StarryRenderer);
+      window.addEventListener("resize", () => {
+    dynamicBackground.resize();
+    syncTopbarHeight();
+  });
+    document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    dynamicBackground.stop();
+  } else if (dynamicBackground.mode === "dynamic") {
+    dynamicBackground.start();
+  }
+});
     loadSession();
+    loadThemePreference();
+    loadBackgroundPreference();
     bindEvents();
+    syncTopbarHeight();
+    const topbar = document.querySelector('.topbar');
+    if (window.ResizeObserver && topbar) new ResizeObserver(syncTopbarHeight).observe(topbar);
     try {
       await Store.health();
       state.online = true;
       const r = await Store.topics();
       state.topics = r.topics || [];
       sig.topics = JSON.stringify(state.topics);
+      await loadAnnouncements();
       if (isLogged()) {
         try { const me = await api("GET", "api/me"); state.user = me.user; saveSession(); } catch (e) { clearSession(); }
         await loadPrivateData();
       }
      renderPlaza();
-
-     const savedTheme = localStorage.getItem(
-       THEME_STORAGE_KEY
-     );
-
-     if (savedTheme && THEMES[savedTheme]) {
-       // 已经选择过主题
-       applyTheme(savedTheme);
-
-       // 没登录的话继续原来的身份选择
-       if (!isLogged()) {
-         openRoleModal();
-       }
-    } else {
-      // 第一次进入，或者保存的主题已经无效
-      showThemeChooser();
-    }
+     if (sharedProjectId) {
+       setTimeout(() => openSharedProject(sharedProjectId), 0);
+     } else if (!hasThemePreference()) {
+       showThemeChooser();
+     } else if (!isLogged()) {
+       openRoleModal();
+     }
 
 connectSse();
       setInterval(refreshAll, 5000);
@@ -1962,3 +2816,38 @@ connectSse();
 
   init();
 })();
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        if (
+            window.ProjectHubAgent
+        ) {
+            window.ProjectHubAgent.init({
+                projectId:
+                    window.currentProjectId ||
+                    null,
+
+                isLeader:
+                    Boolean(
+                        window.currentUser &&
+                        (
+                            window.currentUser.role ===
+                            "project_leader" ||
+                            window.currentUser.isProjectLeader
+                        )
+                    ),
+
+                isAdmin:
+                    Boolean(
+                        window.currentUser &&
+                        (
+                            window.currentUser.role ===
+                            "admin" ||
+                            window.currentUser.role ===
+                            "system_admin"
+                        )
+                    ),
+            });
+        }
+    }
+);

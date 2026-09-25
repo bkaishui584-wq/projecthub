@@ -28,6 +28,11 @@ def empty_state() -> dict[str, Any]:
         "files": {},
         "notifications": {},
         "reports": [],
+        "announcements": [],
+        "announcementReads": {},
+        "penalties": [],
+        "appeals": [],
+        "auditLogs": [],
         "security": {"csrf_secret": ""},
     }
 
@@ -44,6 +49,11 @@ def normalize_state(value: Any) -> dict[str, Any]:
         "files": src.get("files") if isinstance(src.get("files"), dict) else base["files"],
         "notifications": src.get("notifications") if isinstance(src.get("notifications"), dict) else base["notifications"],
         "reports": src.get("reports") if isinstance(src.get("reports"), list) else base["reports"],
+        "announcements": src.get("announcements") if isinstance(src.get("announcements"), list) else base["announcements"],
+        "announcementReads": src.get("announcementReads") if isinstance(src.get("announcementReads"), dict) else base["announcementReads"],
+        "penalties": src.get("penalties") if isinstance(src.get("penalties"), list) else base["penalties"],
+        "appeals": src.get("appeals") if isinstance(src.get("appeals"), list) else base["appeals"],
+        "auditLogs": src.get("auditLogs") if isinstance(src.get("auditLogs"), list) else base["auditLogs"],
         "security": src.get("security") if isinstance(src.get("security"), dict) else base["security"],
     }
 

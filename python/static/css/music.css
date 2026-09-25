@@ -1,0 +1,15 @@
+.music-player { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 45; font-family: var(--font-sans); color: var(--text); }
+.music-toggle { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: #fff; background: var(--grad-primary); box-shadow: 0 12px 28px rgba(0,0,0,.22); cursor: pointer; }
+.music-panel { position: absolute; right: 0; bottom: 58px; width: min(286px, calc(100vw - 28px)); padding: 14px; border: 1px solid var(--glass-border, var(--line-strong)); border-radius: 18px; background: var(--card-bg-strong, var(--ink-1)); box-shadow: var(--glass-shadow, var(--shadow)); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.music-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .84rem; font-weight: 800; }
+.music-close { width: 26px; height: 26px; border-radius: 50%; color: var(--text-dim); background: rgba(127,127,127,.1); }
+.music-track { min-height: 2.4em; margin: 10px 0 8px; color: var(--text-muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-progress-row { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 6px; color: var(--text-dim); font-size: .68rem; }
+.music-player input[type="range"] { width: 100%; accent-color: var(--mint); }
+.music-controls { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 10px 0; }
+.music-controls button, .music-options button, .music-close { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--text-muted); background: rgba(127,127,127,.08); border: 1px solid var(--line); }
+.music-controls button:hover, .music-options button:hover, .music-close:hover { color: var(--text); border-color: var(--line-strong); }
+.music-options { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
+.music-options .is-on { color: var(--mint); border-color: var(--mint); background: var(--mint-soft); }
+@media (max-width: 640px) { .music-player { right: max(8px, env(safe-area-inset-right)); bottom: calc(112px + env(safe-area-inset-bottom)); } .music-panel { bottom: 54px; width: min(270px, calc(100vw - 16px)); padding: 12px; } .projecthub-pet { bottom: calc(116px + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .music-player *, .music-panel { transition: none !important; animation: none !important; } }

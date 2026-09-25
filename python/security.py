@@ -122,6 +122,8 @@ def sniff_file(data: bytes) -> str | None:
         return "zip"
     if data.startswith(b"\xd0\xcf\x11\xe0"):
         return "ole"
+    if data.startswith(b"%PDF-"):
+        return "pdf"
     return None
 
 
@@ -158,5 +160,5 @@ def security_headers() -> dict[str, str]:
         "X-Frame-Options": "DENY",
         "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=()",
         "Cross-Origin-Resource-Policy": "same-origin",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     }

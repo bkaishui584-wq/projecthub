@@ -17,9 +17,10 @@ from typing import Any, Iterator
 
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, make_response, request, send_from_directory, stream_with_context
+from werkzeug.exceptions import HTTPException
 
-import ai
 import security as sec
+from agent.integration.service import AgentService
 from storage import StateConflictError, StateManager, empty_state
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,12 +28,24 @@ load_dotenv(BASE_DIR / ".env")
 os.environ.setdefault("PORT", "8787")
 os.environ.setdefault("ADMIN_NICKNAME", "白开水")
 
-DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data")).resolve()
+def resolve_runtime_path(value: str | os.PathLike[str], default: Path) -> Path:
+    path = Path(value).expanduser() if value else default
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
+DATA_DIR = resolve_runtime_path(os.environ.get("DATA_DIR", ""), BASE_DIR / "data")
+DATABASE_PATH = resolve_runtime_path(os.environ.get("DATABASE_PATH", ""), DATA_DIR / "projecthub.sqlite3")
+LEGACY_STORE_PATH = resolve_runtime_path(os.environ.get("LEGACY_STORE_PATH", ""), DATA_DIR / "store.json")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-STATE = StateManager(DATA_DIR / "projecthub.sqlite3", DATA_DIR / "store.json")
+DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+STATE = StateManager(DATABASE_PATH, LEGACY_STORE_PATH)
 STATE.init()
 if sec.ensure_security(STATE.state):
     STATE.save()
+
+AGENT_SERVICE = AgentService()
 
 app = Flask(__name__, static_folder=str(BASE_DIR / "static"), static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 8 * 1024 * 1024))
@@ -40,13 +53,21 @@ app.config["JSON_AS_ASCII"] = False
 
 ADMIN_NICKNAME = os.environ.get("ADMIN_NICKNAME", "白开水")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-ADMIN_PASSWORD_REVISION = os.environ.get("ADMIN_PASSWORD_REVISION", "1").strip() or "1"
 SESSION_TTL = 7 * 24 * 3600
 SESSION_COOKIE = "ph_session"
 CSRF_COOKIE = "ph_csrf"
 MAX_FILE_BYTES = int(os.environ.get("MAX_FILE_BYTES", 5 * 1024 * 1024))
 MAX_STORAGE_PER_USER = int(os.environ.get("MAX_STORAGE_PER_USER", 50 * 1024 * 1024))
 ROLE_TAGS = ["项目策划", "技术成员", "设计成员", "文案/材料成员", "调研成员", "答辩成员"]
+PROJECT_STATUSES = {"recruiting", "formed", "active", "paused", "completed", "archived"}
+PROJECT_TRANSITIONS = {
+    "recruiting": {"formed", "archived"},
+    "formed": {"active", "paused", "archived"},
+    "active": {"paused", "completed", "archived"},
+    "paused": {"active", "completed", "archived"},
+    "completed": {"archived"},
+    "archived": set(),
+}
 MAJOR_IDS = {f"m{i}" for i in range(1, 29)}
 ALLOWED_FILE_EXT = {".doc", ".docx", ".jpg", ".jpeg", ".png"}
 EXT_FAMILY = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png", ".docx": "zip", ".doc": "ole"}
@@ -221,6 +242,40 @@ def is_owner(topic: dict[str, Any], user: dict[str, Any] | None) -> bool:
     return bool(user and (topic.get("creatorId") == user.get("id") or user.get("role") == "admin"))
 
 
+def agent_project_access(
+    project_id: str,
+    user: dict[str, Any] | None,
+    require_member: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not user:
+        raise ApiError("请先登录", 401)
+
+    topic = find_topic(project_id)
+    if not topic:
+        raise ApiError("项目不存在", 404)
+
+    if user.get("role") == "admin":
+        return topic, user
+
+    if require_member and not is_member(topic, user.get("id")):
+        raise ApiError("只有项目成员才能访问 Agent", 403)
+
+    return topic, user
+
+
+def agent_role(
+    topic: dict[str, Any],
+    user: dict[str, Any] | None,
+) -> str:
+    if not user:
+        return "project_member"
+    if user.get("role") == "admin":
+        return "system_admin"
+    if topic.get("creatorId") == user.get("id"):
+        return "project_leader"
+    return "project_member"
+
+
 def missing_tags(topic: dict[str, Any]) -> list[str]:
     filled = {m.get("tag") for m in topic.get("members", []) if m.get("tag")}
     return [tag for tag in topic.get("neededRoles", []) if tag not in filled]
@@ -228,19 +283,20 @@ def missing_tags(topic: dict[str, Any]) -> list[str]:
 
 def public_topic(topic: dict[str, Any]) -> dict[str, Any]:
     copy = dict(topic)
-    for key in ("password", "passwordHash", "passwordSalt", "ai"):
+    for key in ("password", "passwordHash", "passwordSalt"):
         copy.pop(key, None)
     copy["pendingApplications"] = sum(
         1 for app in STATE.state["applications"] if app.get("topicId") == topic.get("id") and app.get("status") == "pending"
     )
     copy["missingTags"] = missing_tags(topic)
+    copy.setdefault("status", "recruiting")
+    copy.setdefault("createdAt", 0)
+    copy.setdefault("updatedAt", copy.get("createdAt", 0))
     return copy
 
 
 def view_topic(topic: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
     copy = public_topic(topic)
-    copy["aiEnabled"] = bool((topic.get("ai") or {}).get("enabled"))
-    copy["aiRounds"] = int((topic.get("ai") or {}).get("rounds", 0))
     owner = is_owner(topic, user)
     member = bool(user and is_member(topic, user.get("id")))
     if not owner:
@@ -256,66 +312,6 @@ def view_topic(topic: dict[str, Any], user: dict[str, Any] | None) -> dict[str, 
     return copy
 
 
-def default_ai() -> dict[str, Any]:
-    return {
-        "enabled": False,
-        "status": "idle",
-        "phase": "ANALYZE",
-        "rounds": 0,
-        "promptVersion": ai.PROMPT_VERSION,
-        "draft": "",
-        "options": [],
-        "announcement": None,
-        "deep": None,
-        "source": "local",
-        "model": "本地演示模式",
-        "updatedAt": 0,
-    }
-
-
-def ensure_ai(topic: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(topic.get("ai"), dict):
-        topic["ai"] = default_ai()
-    return topic["ai"]
-
-
-def ai_view(topic: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
-    value = ensure_ai(topic)
-    base = {
-        "enabled": bool(value.get("enabled")),
-        "status": value.get("status", "idle"),
-        "phase": value.get("phase", "ANALYZE"),
-        "rounds": int(value.get("rounds", 0)),
-        "promptVersion": value.get("promptVersion", ai.PROMPT_VERSION),
-        "config": ai.public_config(),
-    }
-    if not value.get("enabled"):
-        return base
-    if not user or (not is_member(topic, user.get("id")) and not is_owner(topic, user)):
-        return {**base, "error": "只有话题成员才能使用 AI 助手"}
-    voters = {v for option in value.get("options", []) for v in option.get("votes", [])}
-    options = [
-        {"id": o.get("id"), "title": o.get("title"), "desc": o.get("desc"), "reason": o.get("reason"), "votes": len(o.get("votes", []))}
-        for o in value.get("options", [])
-    ]
-    mine = next((o.get("id") for o in value.get("options", []) if user.get("id") in o.get("votes", [])), "")
-    deep_items = (value.get("deep") or {}).get("items", [])
-    deep_mine = next((item for item in deep_items if item.get("memberId") == user.get("id")), None)
-    return {
-        **base,
-        "draft": value.get("draft", ""),
-        "announcement": value.get("announcement"),
-        "options": options,
-        "myVote": mine,
-        "voters": len(voters),
-        "totalMembers": len(topic.get("members", [])),
-        "canDeep": int(value.get("rounds", 0)) >= 3 and is_owner(topic, user),
-        "deepMine": deep_mine,
-        "deepAll": value.get("deep") if is_owner(topic, user) else None,
-        "source": value.get("source", "local"),
-        "model": value.get("model", "本地演示模式"),
-        "updatedAt": value.get("updatedAt", 0),
-    }
 
 
 class SseHub:
@@ -386,70 +382,11 @@ def make_project_code() -> str:
     return code
 
 
-def close_voting(topic: dict[str, Any]) -> dict[str, Any]:
-    value = ensure_ai(topic)
-    max_votes = -1
-    winners: list[dict[str, Any]] = []
-    for option in value.get("options", []):
-        count = len(option.get("votes", []))
-        if count > max_votes:
-            max_votes, winners = count, [option]
-        elif count == max_votes:
-            winners.append(option)
-    winner = next((x for x in winners if x.get("id") == "rethink"), winners[0] if winners else None)
-    value["rounds"] = int(value.get("rounds", 0)) + 1
-    if not winner or winner.get("id") == "rethink":
-        value["status"] = "rethink"
-        value["phase"] = "CLARIFY"
-        for member in topic.get("members", []):
-            notify(
-                member.get("id", ""),
-                {
-                    "type": "PROJECT_UPDATE",
-                    "topicId": topic.get("id"),
-                    "topicTitle": topic.get("title"),
-                    "from": "AI 助手",
-                    "text": "本轮投票选择了「再想想」",
-                },
-            )
-    else:
-        value["status"] = "decided"
-        value["phase"] = "RECOMMEND"
-        value["announcement"] = {
-            "text": str(winner.get("title", "")) + "：" + str(winner.get("desc", "")),
-            "optionId": winner.get("id"),
-            "round": value["rounds"],
-            "at": now_ms(),
-        }
-        for member in topic.get("members", []):
-            notify(
-                member.get("id", ""),
-                {
-                    "type": "PROJECT_UPDATE",
-                    "topicId": topic.get("id"),
-                    "topicTitle": topic.get("title"),
-                    "from": "AI 助手",
-                    "text": "新公告：" + value["announcement"]["text"][:60],
-                },
-            )
-    value["updatedAt"] = now_ms()
-    return value
 
 
 def ensure_admin() -> None:
     admin = find_user_by_nickname(ADMIN_NICKNAME)
     if admin:
-        # Updating ADMIN_PASSWORD alone must not silently keep an old hash.
-        # A revision change applies the new password once and invalidates old sessions.
-        if ADMIN_PASSWORD and str(admin.get("passwordRevision") or "") != ADMIN_PASSWORD_REVISION:
-            salt = sec.make_salt()
-            admin["salt"] = salt
-            admin["hash"] = sec.hash_password(ADMIN_PASSWORD, salt)
-            admin["passwordRevision"] = ADMIN_PASSWORD_REVISION
-            for token, session in list(STATE.state["sessions"].items()):
-                if session.get("userId") == admin.get("id"):
-                    STATE.state["sessions"].pop(token, None)
-            STATE.save()
         return
     if not ADMIN_PASSWORD:
         raise RuntimeError("尚未创建管理员，必须配置 ADMIN_PASSWORD")
@@ -461,7 +398,6 @@ def ensure_admin() -> None:
         "grade": "管理员",
         "salt": salt,
         "hash": sec.hash_password(ADMIN_PASSWORD, salt),
-        "passwordRevision": ADMIN_PASSWORD_REVISION,
         "role": "admin",
         "banned": False,
         "directions": [],
@@ -492,6 +428,21 @@ def create_user(nickname: str, password: str, grade: str, role: str = "user", di
     return user
 
 
+def request_public_origin() -> str:
+    scheme = request.scheme
+    host = request.host
+    trusted_proxy = os.environ.get("TRUST_PROXY") == "1" or request.remote_addr in {"127.0.0.1", "::1"}
+    if trusted_proxy:
+        forwarded_host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip()
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip()
+        if forwarded_host:
+            host = forwarded_host
+        if forwarded_proto:
+            scheme = forwarded_proto
+    return scheme + "://" + host
+
+
+@app.after_request
 def after_request(response: Response) -> Response:
     for key, value in sec.security_headers().items():
         response.headers.setdefault(key, value)
@@ -523,7 +474,7 @@ def protect_cookie_writes():
     origin = request.headers.get("Origin", "")
     if origin:
         allowed = [x.strip() for x in os.environ.get("ALLOWED_ORIGINS", "").split(",") if x.strip()]
-        same = origin == f"{request.scheme}://{request.host}"
+        same = origin == request_public_origin()
         if not same and origin not in allowed:
             raise ApiError("请求来源不被允许", 403)
     return None
@@ -532,6 +483,21 @@ def protect_cookie_writes():
 @app.errorhandler(ApiError)
 def handle_api_error(error: ApiError):
     return send_json({"error": error.message}, error.status)
+
+
+@app.errorhandler(StateConflictError)
+def handle_state_conflict(_error: StateConflictError):
+    return send_json({"error": "数据已被其他操作更新，请刷新后重试"}, 409)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error: Exception):
+    if isinstance(error, HTTPException):
+        return error
+    if request.path.startswith("/api/"):
+        app.logger.exception("Unhandled API error")
+        return send_json({"error": "服务器内部错误"}, 500)
+    return "服务器内部错误", 500
 
 
 def register():
@@ -601,7 +567,30 @@ def logout():
 
 def topics_collection(user: dict[str, Any] | None):
     if request.method == "GET":
-        return send_json({"topics": [view_topic(topic, user) for topic in STATE.state["topics"]]})
+        query = sec.clean_text(request.args.get("q"), 100, False).lower()
+        status_filter = sec.clean_text(request.args.get("status"), 30, False)
+        recruiting_only = request.args.get("recruiting") == "1"
+        result = []
+        for topic in STATE.state["topics"]:
+            if status_filter and status_filter != "all" and topic.get("status", "recruiting") != status_filter:
+                continue
+            if recruiting_only and topic.get("status", "recruiting") != "recruiting":
+                continue
+            if query:
+                haystack = " ".join(
+                    [
+                        str(topic.get("title") or ""),
+                        str(topic.get("desc") or ""),
+                        str(topic.get("vibe") or ""),
+                        " ".join(map(str, topic.get("directions") or [])),
+                        " ".join(map(str, topic.get("required") or [])),
+                        " ".join(map(str, topic.get("neededRoles") or [])),
+                    ]
+                ).lower()
+                if query not in haystack:
+                    continue
+            result.append(view_topic(topic, user))
+        return send_json({"topics": result})
     if not user:
         raise ApiError("请先登录再创建项目", 401)
     if user.get("banned"):
@@ -645,8 +634,13 @@ def topics_collection(user: dict[str, Any] | None):
         "passwordSalt": "",
         "limit": limit,
         "members": [{"id": user["id"], "nickname": user["nickname"], "grade": user.get("grade", ""), "tag": ""}],
-        "ai": default_ai(),
+        "status": "recruiting",
         "createdAt": now_ms(),
+        "updatedAt": now_ms(),
+        "tasks": [],
+        "resources": [],
+        "activities": [],
+        "outcome": None,
     }
     if topic_type == "private":
         salt = sec.make_salt()
@@ -696,6 +690,9 @@ def messages_route(topic: dict[str, Any], user: dict[str, Any] | None, parts: li
             raise ApiError("只有话题成员才能发言", 403)
         if user.get("banned"):
             raise ApiError("该账号已被封禁", 403)
+        muted_until = int(user.get("mutedUntil") or 0)
+        if user.get("muted") and (not muted_until or muted_until > now_ms()):
+            raise ApiError("你当前已被禁言", 403)
         body = json_body()
         text = sec.clean_text(body.get("text"), 1000)
         if not text:
@@ -905,51 +902,326 @@ def notifications_route(user: dict[str, Any], path: str):
     return send_json({"notifications": bucket[:limit], "unread": sum(1 for n in bucket if not n.get("read"))})
 
 
+def append_audit_log(actor: dict[str, Any], action: str, target_type: str, target_id: str, detail: str = "") -> None:
+    STATE.state.setdefault("auditLogs", []).insert(0, {
+        "id": new_id("audit"),
+        "actorId": actor.get("id"),
+        "actorName": actor.get("nickname"),
+        "action": action,
+        "targetType": target_type,
+        "targetId": target_id,
+        "detail": detail,
+        "createdAt": now_ms(),
+    })
+    STATE.state["auditLogs"] = STATE.state["auditLogs"][:1000]
+
+
 def admin_route(user: dict[str, Any] | None, parts: list[str]):
     if not user or user.get("role") != "admin":
         raise ApiError("需要管理员权限", 403)
-    if len(parts) >= 3 and parts[2] == "users" and len(parts) == 3 and request.method == "GET":
+
+    method = request.method
+    stamp = now_ms()
+
+    def set_penalty(target: dict[str, Any], penalty_type: str, active: bool, reason: str) -> None:
+        penalties = STATE.state.setdefault("penalties", [])
+        current = next(
+            (
+                item
+                for item in penalties
+                if item.get("userId") == target.get("id")
+                and item.get("type") == penalty_type
+                and item.get("active")
+            ),
+            None,
+        )
+        if active:
+            payload = {
+                "reason": reason,
+                "active": True,
+                "createdAt": stamp,
+                "createdBy": user.get("id"),
+                "createdByName": user.get("nickname"),
+            }
+            if current:
+                current.update(payload)
+            else:
+                penalties.insert(
+                    0,
+                    {
+                        "id": new_id("penalty"),
+                        "userId": target.get("id"),
+                        "userName": target.get("nickname"),
+                        "type": penalty_type,
+                        **payload,
+                    },
+                )
+            penalties[:] = penalties[:1000]
+            return
+        for item in penalties:
+            if item.get("userId") == target.get("id") and item.get("type") == penalty_type and item.get("active"):
+                item["active"] = False
+                item["revokedAt"] = stamp
+                item["revokedBy"] = user.get("id")
+
+    if len(parts) == 2 and parts[1] == "users" and method == "GET":
         users = []
         for item in STATE.state["users"].values():
             value = public_user(item) or {}
-            value["topicCount"] = sum(1 for t in STATE.state["topics"] if t.get("creatorId") == item.get("id"))
+            value["topicCount"] = sum(1 for topic in STATE.state["topics"] if topic.get("creatorId") == item.get("id"))
+            value["muted"] = bool(item.get("muted"))
+            value["penalties"] = [
+                dict(penalty)
+                for penalty in STATE.state.setdefault("penalties", [])
+                if penalty.get("userId") == item.get("id") and penalty.get("active")
+            ]
             users.append(value)
-        users.sort(key=lambda x: x.get("createdAt", 0))
+        users.sort(key=lambda item: item.get("createdAt", 0), reverse=True)
         return send_json({"users": users})
-    if len(parts) >= 5 and parts[2] == "users" and parts[4] == "ban" and request.method == "POST":
-        target = STATE.state["users"].get(parts[3])
+
+    if len(parts) == 4 and parts[1] == "users" and method == "POST":
+        target = STATE.state["users"].get(parts[2])
         if not target:
             raise ApiError("用户不存在", 404)
         if target.get("role") == "admin":
-            raise ApiError("不能封禁管理员账号", 403)
+            raise ApiError("不能操作管理员账号", 403)
+        action = parts[3]
         body = json_body()
-        target["banned"] = bool(body.get("banned"))
-        if target["banned"]:
-            for token, session in list(STATE.state["sessions"].items()):
-                if session.get("userId") == target.get("id"):
-                    STATE.state["sessions"].pop(token, None)
+        if action == "ban":
+            target["banned"] = bool(body.get("banned"))
+            reason = sec.clean_text(body.get("reason"), 300) or "管理员封禁"
+            set_penalty(target, "ban", bool(target["banned"]), reason)
+            if target["banned"]:
+                for token, session in list(STATE.state["sessions"].items()):
+                    if session.get("userId") == target.get("id"):
+                        STATE.state["sessions"].pop(token, None)
+            append_audit_log(user, "user.ban", "user", target.get("id", ""), "banned=" + str(target["banned"]))
+        elif action == "mute":
+            target["muted"] = bool(body.get("muted"))
+            try:
+                expires_at = int(body.get("expiresAt") or 0)
+            except (TypeError, ValueError):
+                expires_at = 0
+            target["mutedUntil"] = expires_at if target["muted"] else 0
+            target["muteReason"] = sec.clean_text(body.get("reason"), 300) if target["muted"] else ""
+            reason = target.get("muteReason") or "管理员禁言"
+            set_penalty(target, "mute", bool(target["muted"]), reason)
+            append_audit_log(user, "user.mute", "user", target.get("id", ""), "muted=" + str(target["muted"]))
+        else:
+            raise ApiError("管理员用户操作不存在", 404)
         STATE.save()
         return send_json({"user": public_user(target)})
-    if len(parts) >= 4 and parts[2] == "reports":
-        if len(parts) == 3 and request.method == "GET":
-            return send_json({"reports": STATE.state["reports"][:200]})
-        if parts[4] == "resolve" and request.method == "POST":
-            report = next((r for r in STATE.state["reports"] if r.get("id") == parts[3]), None)
-            if not report:
-                raise ApiError("举报不存在", 404)
-            report["status"] = "resolved"
-            report["handledAt"] = now_ms()
-            report["handledBy"] = user.get("nickname")
+
+    if len(parts) == 2 and parts[1] == "stats" and method == "GET":
+        stats = {
+            "users": len(STATE.state["users"]),
+            "topics": len(STATE.state["topics"]),
+            "messages": sum(len(bucket) for bucket in STATE.state["messages"].values()),
+            "files": sum(len(bucket) for bucket in STATE.state["files"].values()),
+            "reportsOpen": sum(1 for item in STATE.state["reports"] if item.get("status") == "open"),
+            "appealsOpen": sum(1 for item in STATE.state["appeals"] if item.get("status") == "pending"),
+            "announcementsPublished": sum(1 for item in STATE.state["announcements"] if item.get("status") == "published"),
+            "auditLogs": len(STATE.state["auditLogs"]),
+        }
+        return send_json({"stats": stats})
+
+    if len(parts) == 2 and parts[1] == "topics" and method == "GET":
+        topics = []
+        for topic in sorted(STATE.state["topics"], key=lambda item: item.get("createdAt", 0), reverse=True):
+            value = public_topic(topic)
+            value["memberCount"] = len(topic.get("members", []))
+            topics.append(value)
+        return send_json({"topics": topics})
+
+    if len(parts) == 2 and parts[1] == "files" and method == "GET":
+        files = []
+        for topic_id, bucket in STATE.state["files"].items():
+            topic = find_topic(topic_id)
+            for item in bucket:
+                files.append(
+                    {
+                        "id": item.get("id"),
+                        "name": item.get("name"),
+                        "type": item.get("type"),
+                        "size": item.get("size"),
+                        "uploaderId": item.get("uploaderId"),
+                        "uploaderName": item.get("uploaderName"),
+                        "at": item.get("at"),
+                        "topicId": topic_id,
+                        "topicTitle": topic.get("title") if topic else "",
+                    }
+                )
+        files.sort(key=lambda item: item.get("at", 0), reverse=True)
+        return send_json({"files": files})
+
+    if len(parts) == 3 and parts[1] == "files" and method == "DELETE":
+        file_id = parts[2]
+        for topic_id, bucket in STATE.state["files"].items():
+            item = next((entry for entry in bucket if entry.get("id") == file_id), None)
+            if not item:
+                continue
+            STATE.delete_file(item.get("storedName", ""))
+            bucket.remove(item)
+            append_audit_log(user, "file.delete", "file", file_id, item.get("name", ""))
             STATE.save()
-            return send_json({"report": report})
+            broadcast_all("files", {"action": "deleted", "topicId": topic_id, "fileId": file_id})
+            return send_json({"ok": True})
+        raise ApiError("文件不存在", 404)
+
+    if len(parts) == 2 and parts[1] == "announcements" and method == "GET":
+        items = sorted(
+            STATE.state.setdefault("announcements", []),
+            key=lambda item: (bool(item.get("pinned")), int(item.get("createdAt") or 0)),
+            reverse=True,
+        )
+        return send_json({"announcements": [dict(item) for item in items]})
+
+    if len(parts) == 2 and parts[1] == "announcements" and method == "POST":
+        body = json_body()
+        title = sec.clean_text(body.get("title"), 100, False)
+        content = sec.clean_text(body.get("content"), 5000)
+        status = str(body.get("status") or "draft")
+        if status not in {"draft", "published", "withdrawn", "archived"}:
+            raise ApiError("公告状态不合法")
+        if not title or not content:
+            raise ApiError("请填写公告标题和内容")
+        item = {
+            "id": new_id("ann"),
+            "title": title,
+            "content": content,
+            "status": status,
+            "importance": str(body.get("importance") or "normal"),
+            "pinned": bool(body.get("pinned")),
+            "publishAt": int(body.get("publishAt") or stamp),
+            "createdBy": user.get("id"),
+            "createdByName": user.get("nickname"),
+            "createdAt": stamp,
+            "updatedAt": stamp,
+        }
+        STATE.state.setdefault("announcements", []).insert(0, item)
+        append_audit_log(user, "announcement.create", "announcement", item["id"], status)
+        STATE.save()
+        broadcast_all("announcements", {"action": "created", "announcementId": item["id"]})
+        return send_json({"announcement": item})
+
+    if len(parts) == 3 and parts[1] == "announcements" and method in {"PATCH", "DELETE"}:
+        item = next((entry for entry in STATE.state.setdefault("announcements", []) if entry.get("id") == parts[2]), None)
+        if not item:
+            raise ApiError("公告不存在", 404)
+        if method == "DELETE":
+            item["status"] = "archived"
+            action = "announcement.archive"
+        else:
+            body = json_body()
+            if "title" in body:
+                title = sec.clean_text(body.get("title"), 100, False)
+                if not title:
+                    raise ApiError("公告标题不能为空")
+                item["title"] = title
+            if "content" in body:
+                content = sec.clean_text(body.get("content"), 5000)
+                if not content:
+                    raise ApiError("公告内容不能为空")
+                item["content"] = content
+            if "status" in body:
+                status = str(body.get("status") or "")
+                if status not in {"draft", "published", "withdrawn", "archived"}:
+                    raise ApiError("公告状态不合法")
+                item["status"] = status
+            if "importance" in body:
+                item["importance"] = str(body.get("importance") or "normal")
+            if "pinned" in body:
+                item["pinned"] = bool(body.get("pinned"))
+            if "publishAt" in body:
+                try:
+                    item["publishAt"] = int(body.get("publishAt") or stamp)
+                except (TypeError, ValueError):
+                    raise ApiError("发布时间不合法")
+            action = "announcement.update"
+        item["updatedAt"] = stamp
+        append_audit_log(user, action, "announcement", item.get("id", ""), item.get("status", ""))
+        STATE.save()
+        broadcast_all("announcements", {"action": "updated", "announcementId": item.get("id")})
+        return send_json({"announcement": item})
+
+    if len(parts) == 2 and parts[1] == "appeals" and method == "GET":
+        items = sorted(STATE.state.setdefault("appeals", []), key=lambda item: item.get("createdAt", 0), reverse=True)
+        return send_json({"appeals": [dict(item) for item in items]})
+
+    if len(parts) == 4 and parts[1] == "appeals" and parts[3] == "resolve" and method == "POST":
+        appeal = next((item for item in STATE.state.setdefault("appeals", []) if item.get("id") == parts[2]), None)
+        if not appeal:
+            raise ApiError("申诉不存在", 404)
+        body = json_body()
+        decision = str(body.get("decision") or "")
+        if decision not in {"approved", "rejected"}:
+            raise ApiError("申诉处理结果不合法")
+        appeal["status"] = decision
+        appeal["result"] = sec.clean_text(body.get("result"), 1000)
+        appeal["handledAt"] = stamp
+        appeal["handledBy"] = user.get("id")
+        appeal["handledByName"] = user.get("nickname")
+        notify(appeal.get("userId", ""), {"type": "APPEAL_RESULT", "from": "管理员", "text": "你的申诉已有处理结果：" + appeal["result"]})
+        append_audit_log(user, "appeal.resolve", "appeal", appeal.get("id", ""), decision)
+        STATE.save()
+        return send_json({"appeal": appeal})
+
+    if len(parts) == 2 and parts[1] == "penalties" and method == "GET":
+        items = sorted(STATE.state.setdefault("penalties", []), key=lambda item: item.get("createdAt", 0), reverse=True)
+        return send_json({"penalties": [dict(item) for item in items]})
+
+    if len(parts) == 4 and parts[1] == "penalties" and parts[3] == "revoke" and method == "POST":
+        penalty = next((item for item in STATE.state.setdefault("penalties", []) if item.get("id") == parts[2]), None)
+        if not penalty:
+            raise ApiError("处罚记录不存在", 404)
+        penalty["active"] = False
+        penalty["revokedAt"] = stamp
+        penalty["revokedBy"] = user.get("id")
+        target = STATE.state["users"].get(penalty.get("userId"))
+        if target:
+            if penalty.get("type") == "ban":
+                target["banned"] = False
+            elif penalty.get("type") == "mute":
+                target["muted"] = False
+                target["mutedUntil"] = 0
+            notify(target.get("id", ""), {"type": "SYSTEM_NOTIFICATION", "from": "管理员", "text": "相关处罚已撤销"})
+        append_audit_log(user, "penalty.revoke", "penalty", penalty.get("id", ""), penalty.get("type", ""))
+        STATE.save()
+        return send_json({"penalty": penalty})
+
+    if len(parts) == 2 and parts[1] == "audit" and method == "GET":
+        try:
+            limit = max(1, min(500, int(request.args.get("limit", "100"))))
+        except (TypeError, ValueError):
+            limit = 100
+        logs = [
+            dict(item, at=item.get("at") or item.get("createdAt", 0))
+            for item in STATE.state.setdefault("auditLogs", [])[:limit]
+        ]
+        return send_json({"logs": logs})
+
+    if len(parts) == 2 and parts[1] == "reports" and method == "GET":
+        items = sorted(STATE.state.setdefault("reports", []), key=lambda item: item.get("createdAt", 0), reverse=True)
+        return send_json({"reports": [dict(item) for item in items[:200]]})
+
+    if len(parts) == 4 and parts[1] == "reports" and parts[3] == "resolve" and method == "POST":
+        report = next((item for item in STATE.state.setdefault("reports", []) if item.get("id") == parts[2]), None)
+        if not report:
+            raise ApiError("举报不存在", 404)
+        body = json_body()
+        report["status"] = "dismissed" if body.get("action") == "dismiss" else "resolved"
+        report["handledAt"] = stamp
+        report["handledBy"] = user.get("nickname")
+        append_audit_log(user, "report.resolve", "report", report.get("id", ""), report["status"])
+        STATE.save()
+        return send_json({"report": report})
+
     raise ApiError("接口不存在", 404)
-
-
 def files_route(topic: dict[str, Any], user: dict[str, Any] | None):
     if request.method == "GET":
         if not user or (not is_member(topic, user["id"]) and user.get("role") != "admin"):
             raise ApiError("只有话题成员才能查看文件", 403)
-        files = [dict(f, url="api/files/" + f.get("id", "")) for f in STATE.state["files"].get(topic["id"], [])]
+        files = [dict(f, url="/api/files/" + f.get("id", "")) for f in STATE.state["files"].get(topic["id"], [])]
         return send_json({"files": files})
     if request.method == "POST":
         if not user or (not is_member(topic, user["id"]) and user.get("role") != "admin"):
@@ -1001,7 +1273,7 @@ def files_route(topic: dict[str, Any], user: dict[str, Any] | None):
         )
         STATE.save()
         broadcast_topic(topic, "files", {"topicId": topic["id"]})
-        return send_json({"file": {**meta, "url": "api/files/" + file_id}})
+        return send_json({"file": {**meta, "url": "/api/files/" + file_id}})
     if request.method == "DELETE" and len(request.path.split("/")) >= 5:
         file_id = request.path.rstrip("/").split("/")[-1]
         bucket = STATE.state["files"].get(topic["id"], [])
@@ -1059,111 +1331,6 @@ def tag_route(topic: dict[str, Any], user: dict[str, Any] | None, member_id: str
     return send_json({"topic": view_topic(topic, user)})
 
 
-def ai_route(topic: dict[str, Any], user: dict[str, Any] | None, parts: list[str]):
-    action = parts[3] if len(parts) > 3 else ""
-    if request.method == "GET":
-        if not user:
-            raise ApiError("请先登录", 401)
-        return send_json({"ai": ai_view(topic, user)})
-    if action == "toggle":
-        if not is_owner(topic, user):
-            raise ApiError("只有项目负责人才能设置 AI 助手", 403)
-        body = json_body()
-        value = ensure_ai(topic)
-        value["enabled"] = bool(body.get("enabled"))
-        if not value["enabled"]:
-            value["status"] = "idle"
-            value["options"] = []
-        value["updatedAt"] = now_ms()
-        STATE.save()
-        return send_json({"ai": ai_view(topic, user)})
-    if action == "think":
-        if not is_owner(topic, user):
-            raise ApiError("只有项目负责人才能让 AI 开始思考", 403)
-        value = ensure_ai(topic)
-        if not value.get("enabled"):
-            raise ApiError("还没有引入 AI 助手")
-        if int(value.get("rounds", 0)) >= 10:
-            raise ApiError("已达到 10 轮思考上限")
-        ensure_rate("ai:" + topic["id"], int(os.environ.get("RATE_AI_TOPIC", "10")), 3600)
-        value.update({"status": "thinking", "phase": "ANALYZE", "draft": "", "options": [], "updatedAt": now_ms()})
-        STATE.save()
-        messages = STATE.state["messages"].get(topic["id"], [])
-        draft = ai.generate_draft(topic, messages)
-        directions = ai.generate_directions(topic, messages, draft["draft"])
-        value.update({"draft": draft["draft"], "source": draft["source"], "model": draft["model"], "status": "voting", "phase": "WAIT_FOR_LEADER"})
-        value["options"] = [
-            {"id": f"o{i + 1}", "title": d.get("title", ""), "desc": d.get("desc", ""), "reason": d.get("reason", ""), "votes": []}
-            for i, d in enumerate(directions.get("directions", [])[:4])
-        ]
-        value["options"].append({"id": "rethink", "title": "再想想", "desc": "这些方向都不太符合预期，想继续和组员讨论。", "reason": "", "votes": []})
-        value["updatedAt"] = now_ms()
-        STATE.save()
-        broadcast_topic(topic, "ai", {"topicId": topic["id"]})
-        return send_json({"ai": ai_view(topic, user)})
-    if action == "vote":
-        if not user or not is_member(topic, user["id"]):
-            raise ApiError("只有话题成员才能投票", 403)
-        value = ensure_ai(topic)
-        if value.get("status") != "voting":
-            raise ApiError("现在不在投票阶段")
-        option_id = str(json_body().get("optionId") or "")
-        option = next((o for o in value.get("options", []) if o.get("id") == option_id), None)
-        if not option:
-            raise ApiError("选项不存在")
-        for item in value.get("options", []):
-            item["votes"] = [v for v in item.get("votes", []) if v != user["id"]]
-        option["votes"].append(user["id"])
-        voters = {v for item in value.get("options", []) for v in item.get("votes", [])}
-        if len(voters) >= len(topic.get("members", [])):
-            close_voting(topic)
-        value["updatedAt"] = now_ms()
-        STATE.save()
-        broadcast_topic(topic, "ai", {"topicId": topic["id"]})
-        return send_json({"ai": ai_view(topic, user)})
-    if action == "close":
-        if not is_owner(topic, user):
-            raise ApiError("只有项目负责人才能结束投票", 403)
-        value = ensure_ai(topic)
-        if value.get("status") != "voting":
-            raise ApiError("现在不在投票阶段")
-        close_voting(topic)
-        STATE.save()
-        broadcast_topic(topic, "ai", {"topicId": topic["id"]})
-        return send_json({"ai": ai_view(topic, user)})
-    if action == "deep":
-        if not is_owner(topic, user):
-            raise ApiError("只有项目负责人才能发起深度分工", 403)
-        value = ensure_ai(topic)
-        if int(value.get("rounds", 0)) < 3:
-            raise ApiError("需要先完成 3 轮以上的思考与投票")
-        value.update({"status": "thinking", "phase": "DECOMPOSE", "updatedAt": now_ms()})
-        STATE.save()
-        deep = ai.generate_deep_plan(topic, STATE.state["messages"].get(topic["id"], []), value.get("draft", ""))
-        items = []
-        for item in deep.get("items", []):
-            member = next((m for m in topic.get("members", []) if m.get("nickname") == item.get("nickname")), None)
-            if member:
-                items.append({**item, "memberId": member.get("id")})
-        value["deep"] = {"at": now_ms(), "items": items, "source": deep.get("source"), "model": deep.get("model")}
-        value["status"] = "assigned"
-        value["phase"] = "ASSIGN"
-        for item in items:
-            notify(
-                item.get("memberId", ""),
-                {
-                    "type": "TASK_ASSIGNMENT",
-                    "topicId": topic["id"],
-                    "topicTitle": topic.get("title"),
-                    "from": "AI 助手",
-                    "text": "你的项目任务与学习建议已经生成",
-                },
-            )
-        value["updatedAt"] = now_ms()
-        STATE.save()
-        broadcast_topic(topic, "ai", {"topicId": topic["id"]})
-        return send_json({"ai": ai_view(topic, user)})
-    raise ApiError("接口不存在", 404)
 
 
 def reports_route(user: dict[str, Any] | None):
@@ -1171,20 +1338,52 @@ def reports_route(user: dict[str, Any] | None):
         raise ApiError("请先登录再举报", 403)
     ensure_rate("report:" + user["id"], 5, 3600)
     body = json_body()
+    target_type = str(body.get("targetType") or "")
+    if target_type not in {"user", "topic", "message", "file"}:
+        raise ApiError("举报目标类型不合法")
     reason = sec.clean_text(body.get("reason"), 60, False)
     detail = sec.clean_text(body.get("detail"), 500)
     topic_id = sec.clean_text(body.get("topicId"), 40, False)
-    target_user_id = sec.clean_text(body.get("targetUserId"), 40, False)
+    target_id = sec.clean_text(body.get("targetId"), 80, False)
+    target_user_id = sec.clean_text(body.get("targetUserId"), 80, False)
     if not reason:
         raise ApiError("请选择举报类型")
+
+    if target_type == "user":
+        if not target_user_id or target_user_id not in STATE.state["users"]:
+            raise ApiError("举报用户不存在", 404)
+        if target_user_id == user.get("id"):
+            raise ApiError("不能举报自己", 400)
+    elif target_type == "topic":
+        topic = find_topic(target_id or topic_id)
+        if not topic:
+            raise ApiError("举报项目不存在", 404)
+        topic_id = topic["id"]
+    elif target_type == "message":
+        topic = find_topic(topic_id)
+        if not topic:
+            raise ApiError("举报项目不存在", 404)
+        message = next((item for item in STATE.state["messages"].get(topic["id"], []) if item.get("id") == target_id), None)
+        if not message:
+            raise ApiError("举报消息不存在", 404)
+    elif target_type == "file":
+        topic = find_topic(topic_id)
+        if not topic:
+            raise ApiError("举报项目不存在", 404)
+        file_item = next((item for item in STATE.state["files"].get(topic["id"], []) if item.get("id") == target_id), None)
+        if not file_item:
+            raise ApiError("举报文件不存在", 404)
+
     topic = find_topic(topic_id) if topic_id else None
     report = {
         "id": new_id("r"),
         "reporterId": user["id"],
         "reporterName": user.get("nickname"),
+        "targetType": target_type,
+        "targetId": target_id,
+        "targetUserId": target_user_id,
         "topicId": topic.get("id") if topic else "",
         "topicTitle": topic.get("title") if topic else "",
-        "targetUserId": target_user_id,
         "reason": reason,
         "detail": detail,
         "status": "open",
@@ -1196,16 +1395,13 @@ def reports_route(user: dict[str, Any] | None):
     STATE.state["reports"] = STATE.state["reports"][:500]
     for admin in STATE.state["users"].values():
         if admin.get("role") == "admin":
-            notify(
-                admin.get("id", ""),
-                {
-                    "type": "REPORT_CREATED",
-                    "topicId": report["topicId"],
-                    "topicTitle": report["topicTitle"],
-                    "from": user.get("nickname"),
-                    "text": "收到一条举报：" + reason,
-                },
-            )
+            notify(admin.get("id", ""), {
+                "type": "REPORT_CREATED",
+                "topicId": report["topicId"],
+                "topicTitle": report["topicTitle"],
+                "from": user.get("nickname"),
+                "text": "收到一条举报：" + reason,
+            })
     STATE.save()
     return send_json({"ok": True, "id": report["id"]})
 
@@ -1275,6 +1471,579 @@ def download_file(file_id: str):
     return response
 
 
+
+def ensure_topic_workspace(topic: dict[str, Any]) -> dict[str, Any]:
+    topic.setdefault("status", "recruiting")
+    topic.setdefault("createdAt", now_ms())
+    topic.setdefault("updatedAt", topic.get("createdAt", now_ms()))
+    topic.setdefault("tasks", [])
+    topic.setdefault("resources", [])
+    topic.setdefault("activities", [])
+    topic.setdefault("outcome", None)
+    return topic
+
+
+def add_activity(topic: dict[str, Any], user: dict[str, Any] | None, event_type: str, text: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    item = {
+        "id": new_id("act"),
+        "type": event_type,
+        "text": text,
+        "actorId": user.get("id") if user else "",
+        "actorName": user.get("nickname") if user else "系统",
+        "at": now_ms(),
+        "meta": meta or {},
+    }
+    topic.setdefault("activities", []).insert(0, item)
+    topic["activities"] = topic["activities"][:500]
+    topic["updatedAt"] = now_ms()
+    return item
+
+
+def task_view(task: dict[str, Any]) -> dict[str, Any]:
+    value = dict(task)
+    due = int(value.get("dueAt") or 0)
+    if due and due < now_ms() and value.get("status") != "completed":
+        value["status"] = "overdue"
+    return value
+
+
+def tasks_route(topic: dict[str, Any], user: dict[str, Any] | None, parts: list[str]) -> Response:
+    ensure_topic_workspace(topic)
+    if not user or (not is_member(topic, user.get("id")) and user.get("role") != "admin"):
+        raise ApiError("只有项目成员才能管理任务", 403)
+
+    tasks = topic.setdefault("tasks", [])
+    if not parts:
+        if request.method == "GET":
+            return send_json({"tasks": [task_view(item) for item in tasks]})
+        if request.method == "POST":
+            if not is_owner(topic, user):
+                raise ApiError("只有项目负责人可以创建任务", 403)
+            body = json_body()
+            client_id = sec.clean_text(body.get("clientId"), 80, False)
+            if client_id:
+                existing = next((item for item in tasks if item.get("clientId") == client_id), None)
+                if existing:
+                    return send_json({"task": task_view(existing), "duplicated": True})
+            title = sec.clean_text(body.get("title"), 120, False)
+            if not title:
+                raise ApiError("请填写任务标题")
+            assignee_id = sec.clean_text(body.get("assigneeId"), 80, False)
+            if assignee_id and not is_member(topic, assignee_id) and assignee_id != topic.get("creatorId"):
+                raise ApiError("任务负责人必须是项目成员")
+            status = str(body.get("status") or "todo")
+            if status not in {"todo", "in_progress", "completed"}:
+                status = "todo"
+            priority = str(body.get("priority") or "medium")
+            if priority not in {"low", "medium", "high"}:
+                priority = "medium"
+            task = {
+                "id": new_id("task"),
+                "clientId": client_id,
+                "title": title,
+                "desc": sec.clean_text(body.get("desc"), 500),
+                "assigneeId": assignee_id,
+                "dueAt": int(body.get("dueAt") or 0),
+                "priority": priority,
+                "status": status,
+                "createdBy": user.get("id"),
+                "createdAt": now_ms(),
+                "updatedAt": now_ms(),
+            }
+            tasks.insert(0, task)
+            add_activity(topic, user, "task_created", "创建任务：" + title, {"taskId": task["id"]})
+            if assignee_id:
+                notify(assignee_id, {"type": "TASK_ASSIGNMENT", "topicId": topic["id"], "topicTitle": topic.get("title"), "from": user.get("nickname"), "text": "你收到一个新任务：" + title})
+            STATE.save()
+            broadcast_topic(topic, "topics", {"topicId": topic["id"]})
+            return send_json({"task": task_view(task)})
+        raise ApiError("请求方法不允许", 405)
+
+    task_id = parts[0]
+    task = next((item for item in tasks if item.get("id") == task_id), None)
+    if not task:
+        raise ApiError("任务不存在", 404)
+
+    if request.method == "PATCH":
+        if not is_owner(topic, user) and task.get("assigneeId") != user.get("id"):
+            raise ApiError("普通成员只能修改自己负责的任务", 403)
+        body = json_body()
+        allowed = {"title", "desc", "assigneeId", "dueAt", "priority", "status"}
+        for key, value in body.items():
+            if key not in allowed:
+                continue
+            if key == "title":
+                value = sec.clean_text(value, 120, False)
+                if not value:
+                    raise ApiError("任务标题不能为空")
+            elif key == "desc":
+                value = sec.clean_text(value, 500)
+            elif key == "assigneeId":
+                if not is_owner(topic, user):
+                    continue
+                value = sec.clean_text(value, 80, False)
+                if value and not is_member(topic, value) and value != topic.get("creatorId"):
+                    raise ApiError("任务负责人必须是项目成员")
+            elif key == "dueAt":
+                value = int(value or 0)
+            elif key == "priority" and value not in {"low", "medium", "high"}:
+                continue
+            elif key == "status" and value not in {"todo", "in_progress", "completed"}:
+                continue
+            task[key] = value
+        task["updatedAt"] = now_ms()
+        add_activity(topic, user, "task_updated", "更新任务：" + task.get("title", ""), {"taskId": task_id, "status": task.get("status")})
+        STATE.save()
+        broadcast_topic(topic, "topics", {"topicId": topic["id"]})
+        return send_json({"task": task_view(task)})
+
+    if request.method == "DELETE":
+        if not is_owner(topic, user):
+            raise ApiError("只有项目负责人可以删除任务", 403)
+        topic["tasks"] = [item for item in tasks if item.get("id") != task_id]
+        add_activity(topic, user, "task_deleted", "删除任务：" + task.get("title", ""), {"taskId": task_id})
+        STATE.save()
+        broadcast_topic(topic, "topics", {"topicId": topic["id"]})
+        return send_json({"ok": True})
+
+    raise ApiError("请求方法不允许", 405)
+
+
+def resources_route(topic: dict[str, Any], user: dict[str, Any] | None, parts: list[str]) -> Response:
+    ensure_topic_workspace(topic)
+    if not user or (not is_member(topic, user.get("id")) and user.get("role") != "admin"):
+        raise ApiError("只有项目成员才能查看资料", 403)
+    resources = topic.setdefault("resources", [])
+    if not parts and request.method == "GET":
+        return send_json({"resources": resources})
+    if not parts and request.method == "POST":
+        body = json_body()
+        kind = str(body.get("kind") or "note")
+        if kind not in {"note", "link", "file"}:
+            raise ApiError("资料类型不合法")
+        title = sec.clean_text(body.get("title"), 120, False)
+        if not title:
+            raise ApiError("请填写资料标题")
+        item = {
+            "id": new_id("res"),
+            "kind": kind,
+            "title": title,
+            "content": sec.clean_text(body.get("content"), 5000),
+            "url": sec.clean_text(body.get("url"), 1000, False),
+            "fileId": sec.clean_text(body.get("fileId"), 80, False),
+            "createdBy": user.get("id"),
+            "createdAt": now_ms(),
+        }
+        resources.insert(0, item)
+        add_activity(topic, user, "resource_created", "新增项目资料：" + title, {"resourceId": item["id"]})
+        STATE.save()
+        broadcast_topic(topic, "topics", {"topicId": topic["id"]})
+        return send_json({"resource": item})
+    if len(parts) == 1 and request.method == "DELETE":
+        if not is_owner(topic, user):
+            raise ApiError("只有项目负责人可以删除项目资料", 403)
+        topic["resources"] = [item for item in resources if item.get("id") != parts[0]]
+        add_activity(topic, user, "resource_deleted", "删除项目资料", {"resourceId": parts[0]})
+        STATE.save()
+        return send_json({"ok": True})
+    raise ApiError("请求方法不允许", 405)
+
+
+def activities_route(topic: dict[str, Any], user: dict[str, Any] | None) -> Response:
+    if not user or (not is_member(topic, user.get("id")) and user.get("role") != "admin"):
+        raise ApiError("只有项目成员才能查看项目动态", 403)
+    ensure_topic_workspace(topic)
+    limit = max(1, min(200, int(request.args.get("limit", "100"))))
+    return send_json({"activities": topic.get("activities", [])[:limit]})
+
+
+def outcome_route(topic: dict[str, Any], user: dict[str, Any] | None) -> Response:
+    ensure_topic_workspace(topic)
+    if not user or (not is_member(topic, user.get("id")) and user.get("role") != "admin"):
+        raise ApiError("只有项目成员才能查看项目成果", 403)
+    if request.method == "GET":
+        return send_json({"outcome": topic.get("outcome")})
+    if request.method == "PATCH":
+        if not is_owner(topic, user):
+            raise ApiError("只有项目负责人可以编辑项目成果", 403)
+        body = json_body()
+        links = body.get("links") if isinstance(body.get("links"), list) else []
+        topic["outcome"] = {
+            "summary": sec.clean_text(body.get("summary"), 2000),
+            "process": sec.clean_text(body.get("process"), 4000),
+            "final": sec.clean_text(body.get("final"), 2000),
+            "links": [x for x in links if isinstance(x, dict)][:20],
+            "awards": sec.clean_text(body.get("awards"), 1000),
+            "updatedAt": now_ms(),
+            "updatedBy": user.get("id"),
+        }
+        add_activity(topic, user, "outcome_updated", "更新项目成果")
+        STATE.save()
+        return send_json({"outcome": topic["outcome"]})
+    raise ApiError("请求方法不允许", 405)
+
+
+def project_status_route(topic: dict[str, Any], user: dict[str, Any] | None) -> Response:
+    ensure_topic_workspace(topic)
+    if not is_owner(topic, user):
+        raise ApiError("只有项目负责人可以修改项目状态", 403)
+    body = json_body()
+    status = str(body.get("status") or "")
+    old = topic.get("status", "recruiting")
+    if status not in PROJECT_STATUSES:
+        raise ApiError("项目状态不合法")
+    if status not in PROJECT_TRANSITIONS.get(old, set()):
+        raise ApiError(f"不允许从 {old} 变更为 {status}")
+    topic["status"] = status
+    topic["updatedAt"] = now_ms()
+    add_activity(topic, user, "project_status", f"项目状态变更为 {status}", {"from": old, "to": status})
+    notify_others(topic, user.get("id", ""), {"type": "PROJECT_STATUS", "topicId": topic["id"], "topicTitle": topic.get("title"), "from": user.get("nickname"), "text": "项目状态已变更为：" + status})
+    STATE.save()
+    broadcast_topic(topic, "topics", {"topicId": topic["id"]})
+    return send_json({"topic": view_topic(topic, user)})
+
+
+def owner_transfer_route(topic: dict[str, Any], user: dict[str, Any] | None) -> Response:
+    if not is_owner(topic, user):
+        raise ApiError("只有项目负责人可以转移负责人", 403)
+    body = json_body()
+    target_id = sec.clean_text(body.get("userId"), 80, False)
+    if not is_member(topic, target_id):
+        raise ApiError("新负责人必须是项目成员")
+    old_owner = topic.get("creatorId")
+    topic["creatorId"] = target_id
+    topic["members"] = [item for item in topic.get("members", []) if item.get("id") != target_id] + [item for item in topic.get("members", []) if item.get("id") == target_id]
+    topic["updatedAt"] = now_ms()
+    add_activity(topic, user, "owner_transferred", "项目负责人已转移", {"from": old_owner, "to": target_id})
+    STATE.save()
+    broadcast_topic(topic, "topics", {"topicId": topic["id"]})
+    return send_json({"topic": view_topic(topic, user)})
+
+
+def announcements_route(user: dict[str, Any] | None, parts: list[str]) -> Response:
+    if not parts and request.method == "GET":
+        now = now_ms()
+        reads = STATE.state.setdefault("announcementReads", {}).setdefault(user.get("id"), []) if user else []
+        items = []
+        for raw in STATE.state.setdefault("announcements", []):
+            if raw.get("status") != "published" or int(raw.get("publishAt") or 0) > now:
+                continue
+            item = dict(raw)
+            item["read"] = item.get("id") in reads
+            items.append(item)
+        items.sort(key=lambda x: (bool(x.get("pinned")), int(x.get("publishAt") or 0)), reverse=True)
+        unread = sum(1 for item in items if not item.get("read")) if user else 0
+        return send_json({"announcements": items, "unread": unread})
+    if len(parts) >= 2 and parts[1] == "read" and request.method == "POST":
+        if not user:
+            raise ApiError("请先登录", 401)
+        item = next((a for a in STATE.state.setdefault("announcements", []) if a.get("id") == parts[0]), None)
+        if not item or item.get("status") != "published":
+            raise ApiError("公告不存在", 404)
+        reads = STATE.state.setdefault("announcementReads", {}).setdefault(user["id"], [])
+        if item["id"] not in reads:
+            reads.append(item["id"])
+            STATE.save()
+        return send_json({"ok": True})
+    raise ApiError("接口不存在", 404)
+
+
+def appeals_route(user: dict[str, Any] | None, parts: list[str]) -> Response:
+    if not user:
+        raise ApiError("请先登录", 401)
+    appeals = STATE.state.setdefault("appeals", [])
+    if not parts and request.method == "GET":
+        return send_json({"appeals": [dict(item) for item in appeals if item.get("userId") == user.get("id")]})
+    if not parts and request.method == "POST":
+        body = json_body()
+        appeal = {
+            "id": new_id("ap"),
+            "userId": user.get("id"),
+            "nickname": user.get("nickname"),
+            "penaltyType": sec.clean_text(body.get("penaltyType"), 12, False),
+            "reason": sec.clean_text(body.get("reason"), 500),
+            "status": "pending",
+            "createdAt": now_ms(),
+            "handledAt": 0,
+            "handledByName": "",
+            "result": "",
+        }
+        if appeal["penaltyType"] not in {"mute", "ban"} or not appeal["reason"]:
+            raise ApiError("请填写处罚类型和申诉理由")
+        appeals.insert(0, appeal)
+        STATE.save()
+        return send_json({"appeal": appeal})
+    raise ApiError("接口不存在", 404)
+
+
+def agent_route(user: dict[str, Any] | None, parts: list[str]):
+    if not user:
+        raise ApiError("请先登录", 401)
+
+    method = request.method
+
+    if len(parts) >= 2 and parts[1] == "status":
+        if method != "GET":
+            raise ApiError("请求方法不允许", 405)
+        project_id = sec.clean_text(request.args.get("projectId"), 80, False)
+        if not project_id:
+            raise ApiError("缺少 projectId")
+        topic, current_user = agent_project_access(project_id, user, True)
+        status = AGENT_SERVICE.get_status(topic["id"])
+
+        from agent.discussion.parser import parse_messages
+
+        messages = [
+            item
+            for item in STATE.state["messages"].get(topic["id"], [])
+            if not item.get("recalled") and str(item.get("text") or "").strip()
+        ]
+        discussion = parse_messages(messages)
+        question_count = sum(
+            1
+            for group in ("facts", "decisions", "opinions", "uncertain")
+            for item in discussion.get(group, [])
+            if item.get("is_question")
+        )
+
+        return send_json(
+            {
+                "agent": {
+                    **status,
+                    "projectId": topic["id"],
+                    "role": agent_role(topic, current_user),
+                    "isLeader": is_owner(topic, current_user),
+                    "isAdmin": current_user.get("role") == "admin",
+                    "metrics": {
+                        "discussions": len(messages),
+                        "directions": len(topic.get("directions") or []),
+                        "questions": question_count,
+                        "materials": len(STATE.state["files"].get(topic["id"], [])),
+                    },
+                }
+            }
+        )
+
+    if len(parts) >= 2 and parts[1] == "authorize":
+        if method != "POST":
+            raise ApiError("请求方法不允许", 405)
+        body = json_body()
+        project_id = sec.clean_text(body.get("projectId"), 80, False)
+        if not project_id:
+            raise ApiError("缺少 projectId")
+        topic, current_user = agent_project_access(project_id, user, True)
+        if not is_owner(topic, current_user):
+            raise ApiError("只有项目负责人才能授权 Agent 开始思考", 403)
+        result = AGENT_SERVICE.authorize_thinking(current_user, topic)
+        if not result.get("success"):
+            raise ApiError(result.get("error", "Agent 无法开始思考"), 409)
+        return send_json({"ok": True, "agent": result})
+
+    if len(parts) >= 2 and parts[1] == "analyze":
+        if method != "POST":
+            raise ApiError("请求方法不允许", 405)
+
+        body = json_body()
+
+        project_id = sec.clean_text(
+            body.get("projectId"),
+            80,
+            False,
+        )
+
+        if not project_id:
+            raise ApiError("缺少 projectId")
+
+        topic, current_user = agent_project_access(
+            project_id,
+            user,
+            True,
+        )
+
+        if not is_owner(topic, current_user):
+            raise ApiError("只有项目负责人才能启动 Agent 分析", 403)
+
+        status = AGENT_SERVICE.get_status(topic["id"])
+
+        if not status.get(
+            "enabled",
+            True,
+        ):
+            raise ApiError(
+                "Agent 当前已被管理员关闭",
+                403,
+            )
+
+        if status.get("state") != "thinking":
+            raise ApiError(
+                "Agent 当前没有获得本轮思考授权",
+                403,
+            )
+
+        ensure_rate(
+            "agent_analyze:" + current_user["id"],
+            int(os.environ.get("RATE_AGENT_ANALYZE_USER", "10")),
+            3600,
+        )
+
+        # -------------------------
+        # 1. 获取真实项目讨论
+        # -------------------------
+
+        messages = STATE.state["messages"].get(
+            topic["id"],
+            [],
+        )[-500:]
+
+        # -------------------------
+        # 2. 从真实讨论中生成
+        #    决定 / 问题 / 方向
+        #
+        # 注意：
+        # 这些不是数据库硬编码，
+        # 而是 Agent 的分析上下文。
+        # -------------------------
+
+        decisions = []
+
+        questions = []
+
+        research_directions = []
+
+        # -------------------------
+        # 3. 当前项目本身已经存在
+        #    的研究方向
+        # -------------------------
+
+        for direction in topic.get("directions", []) or []:
+            research_directions.append(
+                {
+                    "id": (f"{topic['id']}:" f"direction:" f"{direction}"),
+                    "content": str(direction),
+                    "source": (topic["id"]),
+                    "source_type": "project",
+                    "verified": True,
+                }
+            )
+
+        # -------------------------
+        # 4. 项目文件
+        #
+        # Agent 此阶段只看到文件
+        # 元数据，不直接读取文件内容。
+        # -------------------------
+
+        project_files = STATE.state["files"].get(
+            topic["id"],
+            [],
+        )
+
+        # -------------------------
+        # 5. 项目进度
+        #
+        # 当前 ProjectHub 没有独立
+        # progress 数据表，所以不
+        # 虚构进度。
+        # -------------------------
+
+        progress = {
+            "source": "projecthub",
+            "available": False,
+            "reason": ("当前版本尚未建立独立项目进度数据结构"),
+        }
+
+        # -------------------------
+        # 6. 公共资料
+        #
+        # 当前版本文件系统中的项目文件
+        # 先作为资料元数据。
+        # -------------------------
+
+        public_materials = []
+
+        for file_item in project_files:
+            public_materials.append(
+                {
+                    "id": file_item.get("id"),
+                    "title": file_item.get("name"),
+                    "type": file_item.get("type"),
+                    "size": file_item.get("size"),
+                    "source": topic["id"],
+                    "source_type": "project_file",
+                    "verified": True,
+                }
+            )
+
+        # -------------------------
+        # 7. 调用 Agent
+        # -------------------------
+
+        result = AGENT_SERVICE.analyze(
+            user=current_user,
+            project=topic,
+            messages=messages,
+            decisions=decisions,
+            questions=questions,
+            research_directions=(research_directions),
+            progress=progress,
+            public_materials=(public_materials),
+            files=project_files,
+        )
+
+        if not result.get("success", False):
+            raise ApiError(result.get("error", "Agent 分析失败"), 503)
+
+        return send_json({"ok": True, "agent": result})
+    if len(parts) >= 3 and parts[1] == "admin" and parts[2] in {"enable", "disable", "stop"}:
+        if method != "POST":
+            raise ApiError("请求方法不允许", 405)
+        if user.get("role") != "admin":
+            raise ApiError("需要管理员权限", 403)
+        body = json_body()
+        project_id = sec.clean_text(body.get("projectId"), 80, False)
+        if not project_id:
+            raise ApiError("缺少 projectId")
+        if not find_topic(project_id):
+            raise ApiError("项目不存在", 404)
+        if parts[2] == "enable":
+            result = AGENT_SERVICE.enable_project_agent(user, project_id)
+        elif parts[2] == "disable":
+            result = AGENT_SERVICE.disable_project_agent(user, project_id)
+        else:
+            result = AGENT_SERVICE.emergency_stop(user, project_id)
+        return send_json({"ok": bool(result.get("success")), "agent": result})
+
+    if len(parts) >= 3 and parts[1] == "admin" and parts[2] in {"audit", "security"}:
+        if method != "GET":
+            raise ApiError("请求方法不允许", 405)
+        if user.get("role") != "admin":
+            raise ApiError("需要管理员权限", 403)
+        project_id = sec.clean_text(request.args.get("projectId"), 80, False)
+        if not project_id:
+            raise ApiError("缺少 projectId")
+        if not find_topic(project_id):
+            raise ApiError("项目不存在", 404)
+        try:
+            limit = int(request.args.get("limit", "100"))
+        except (TypeError, ValueError):
+            limit = 100
+        limit = max(1, min(500, limit))
+        if parts[2] == "audit":
+            result = AGENT_SERVICE.get_audit_logs(user, project_id, limit)
+            if not result.get("success"):
+                raise ApiError(result.get("error", "无法读取审计日志"), 403)
+            logs = result.get("events", [])
+            return send_json({"logs": logs, "count": len(logs)})
+
+        result = AGENT_SERVICE.get_security_events(user, project_id, limit)
+        if not result.get("success"):
+            raise ApiError(result.get("error", "无法读取安全事件"), 403)
+        events = result.get("events", [])
+        return send_json({"events": events, "count": len(events)})
+
+    raise ApiError("Agent 接口不存在", 404)
+
+
 def dispatch_api(path: str):
     parts = [p for p in path.split("/") if p]
     method = request.method
@@ -1284,16 +2053,14 @@ def dispatch_api(path: str):
     if not parts:
         raise ApiError("接口不存在", 404)
     p1 = parts[0]
+    if p1 == "agent":
+        return agent_route(user, parts)
     if p1 == "health":
         return send_json({"ok": True, "storage": "sqlite", "revision": STATE.revision})
     if p1 == "sse" and len(parts) >= 2 and parts[1] == "ticket" and method == "POST":
         if not user:
             raise ApiError("请先登录", 401)
         return send_json({"ticket": issue_sse_ticket(user["id"]), "expiresInMs": 60000})
-    if p1 == "ai" and len(parts) >= 2 and parts[1] == "config" and method == "GET":
-        if not user:
-            raise ApiError("请先登录", 401)
-        return send_json({"config": ai.public_config()})
     if p1 == "register" and method == "POST":
         return register()
     if p1 == "login" and method == "POST":
@@ -1349,6 +2116,10 @@ def dispatch_api(path: str):
         return notifications_route(user, "")
     if p1 == "reports" and method == "POST":
         return reports_route(user)
+    if p1 == "announcements":
+        return announcements_route(user, parts[1:])
+    if p1 == "appeals":
+        return appeals_route(user, parts[1:])
     if p1 == "admin":
         return admin_route(user, parts)
     if p1 == "applications" and len(parts) >= 3 and parts[2] in {"approve", "reject"} and method == "POST":
@@ -1372,8 +2143,18 @@ def dispatch_api(path: str):
             if len(parts) >= 5 and parts[-1] == "tag" and method == "POST":
                 return tag_route(topic, user, parts[3])
             return members_route(topic, user)
-        if action == "ai":
-            return ai_route(topic, user, ["topics", topic["id"]] + parts[2:])
+        if action == "status" and method == "POST":
+            return project_status_route(topic, user)
+        if action == "owner" and method == "POST":
+            return owner_transfer_route(topic, user)
+        if action == "tasks":
+            return tasks_route(topic, user, parts[3:])
+        if action == "resources":
+            return resources_route(topic, user, parts[3:])
+        if action == "activities" and method == "GET":
+            return activities_route(topic, user)
+        if action == "outcome":
+            return outcome_route(topic, user)
     raise ApiError("接口不存在", 404)
 
 
@@ -1408,6 +2189,11 @@ def api_catchall(path: str):
 
 @app.route("/")
 def index():
+    return send_from_directory(app.static_folder, "index.html")
+
+
+@app.route("/project/<project_id>")
+def project_page(project_id: str):
     return send_from_directory(app.static_folder, "index.html")
 
 
