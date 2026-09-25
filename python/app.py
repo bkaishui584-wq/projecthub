@@ -21,7 +21,7 @@ from werkzeug.exceptions import HTTPException
 
 import security as sec
 from agent.integration.service import AgentService
-from storage import StateConflictError, StateManager, empty_state
+from storage import PostgresStateManager, StateConflictError, StateManager, empty_state
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -40,7 +40,12 @@ DATABASE_PATH = resolve_runtime_path(os.environ.get("DATABASE_PATH", ""), DATA_D
 LEGACY_STORE_PATH = resolve_runtime_path(os.environ.get("LEGACY_STORE_PATH", ""), DATA_DIR / "store.json")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-STATE = StateManager(DATABASE_PATH, LEGACY_STORE_PATH)
+STORAGE_DRIVER = os.environ.get("STORAGE_DRIVER", "auto").strip().lower()
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DATABASE_URL and STORAGE_DRIVER in {"auto", "postgres", "postgresql"}:
+    STATE = PostgresStateManager(DATABASE_URL, LEGACY_STORE_PATH)
+else:
+    STATE = StateManager(DATABASE_PATH, LEGACY_STORE_PATH)
 STATE.init()
 if sec.ensure_security(STATE.state):
     STATE.save()

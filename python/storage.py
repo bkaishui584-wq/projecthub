@@ -12,6 +12,11 @@ from contextlib import contextmanager
 import json
 import os
 import sqlite3
+
+try:
+    import psycopg
+except ImportError:  # pragma: no cover - only used without PostgreSQL enabled
+    psycopg = None
 import threading
 import time
 from pathlib import Path
@@ -204,6 +209,152 @@ class StateManager:
                 db.execute(
                     "INSERT INTO projecthub_rate_limits (key, count, reset_at) VALUES (?, ?, ?) "
                     "ON CONFLICT(key) DO UPDATE SET count = excluded.count, reset_at = excluded.reset_at",
+                    (key, count, reset_at),
+                )
+        return {
+            "allowed": count <= int(limit),
+            "remaining": max(0, int(limit) - count),
+            "retry_after": max(1, int(reset_at - now + 0.999)),
+        }
+
+class PostgresStateManager(StateManager):
+    """PostgreSQL-backed state store with the same transactional contract."""
+
+    def __init__(self, database_url: str, legacy_file: str | os.PathLike[str]) -> None:
+        super().__init__("", legacy_file)
+        self.database_url = database_url
+        self.sslmode = os.environ.get("DATABASE_SSL", "require") or "require"
+
+    def connect(self):
+        if psycopg is None:
+            raise RuntimeError("PostgreSQL 依赖未安装")
+        return psycopg.connect(self.database_url, sslmode=self.sslmode)
+
+    def init(self) -> None:
+        with self.connection() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS projecthub_state (
+                        id SMALLINT PRIMARY KEY CHECK (id = 1),
+                        schema_version INTEGER NOT NULL,
+                        state JSONB NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        revision BIGINT NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS projecthub_file_blobs (
+                        key TEXT PRIMARY KEY,
+                        content BYTEA NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS projecthub_rate_limits (
+                        key TEXT PRIMARY KEY,
+                        count INTEGER NOT NULL,
+                        reset_at TIMESTAMPTZ NOT NULL
+                    )
+                    """
+                )
+                cur.execute(
+                    "INSERT INTO projecthub_state (id, schema_version, state, revision) VALUES (1, 1, %s::jsonb, 0) "
+                    "ON CONFLICT (id) DO NOTHING",
+                    ("{}",),
+                )
+        self.load()
+
+    def load(self) -> None:
+        with self.lock:
+            with self.connection() as db:
+                with db.cursor() as cur:
+                    cur.execute("SELECT state, revision FROM projecthub_state WHERE id = 1")
+                    row = cur.fetchone()
+            if row:
+                raw_state = row[0]
+                if isinstance(raw_state, str):
+                    raw_state = json.loads(raw_state)
+                self.state = normalize_state(raw_state)
+                self.revision = int(row[1])
+                self._has_row = True
+                return
+            self.state = normalize_state(empty_state())
+            self.revision = 0
+            self._has_row = False
+            self.save_locked()
+
+    def save_locked(self) -> None:
+        payload = json.dumps(self.state, ensure_ascii=False, separators=(",", ":"))
+        with self.connection() as db:
+            with db.cursor() as cur:
+                if not self._has_row:
+                    cur.execute(
+                        "INSERT INTO projecthub_state (id, schema_version, state, revision, updated_at) "
+                        "VALUES (1, 1, %s::jsonb, 1, NOW()) ON CONFLICT (id) DO NOTHING",
+                        (payload,),
+                    )
+                    if cur.rowcount != 1:
+                        raise StateConflictError("另一个实例已经初始化了数据库")
+                    self.revision = 1
+                    self._has_row = True
+                    return
+                expected = self.revision
+                cur.execute(
+                    "UPDATE projecthub_state SET state = %s::jsonb, revision = revision + 1, updated_at = NOW() "
+                    "WHERE id = 1 AND revision = %s",
+                    (payload, expected),
+                )
+                if cur.rowcount != 1:
+                    cur.execute("SELECT revision FROM projecthub_state WHERE id = 1")
+                    row = cur.fetchone()
+                    self.revision = int(row[0]) if row else 0
+                    raise StateConflictError("数据已被另一个实例更新，当前写入已拒绝")
+                self.revision = expected + 1
+
+    def save_file(self, key: str, content: bytes) -> None:
+        with self.connection() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO projecthub_file_blobs (key, content, updated_at) VALUES (%s, %s, NOW()) "
+                    "ON CONFLICT (key) DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()",
+                    (key, psycopg.Binary(content)),
+                )
+
+    def read_file(self, key: str) -> bytes | None:
+        with self.connection() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT content FROM projecthub_file_blobs WHERE key = %s", (key,))
+                row = cur.fetchone()
+        return bytes(row[0]) if row else None
+
+    def delete_file(self, key: str) -> None:
+        with self.connection() as db:
+            with db.cursor() as cur:
+                cur.execute("DELETE FROM projecthub_file_blobs WHERE key = %s", (key,))
+
+    def consume_rate(self, key: str, limit: int, window_seconds: float) -> dict[str, Any]:
+        now = time.time()
+        with self.connection() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    "SELECT count, EXTRACT(EPOCH FROM reset_at) FROM projecthub_rate_limits WHERE key = %s FOR UPDATE",
+                    (key,),
+                )
+                row = cur.fetchone()
+                if row and float(row[1]) > now:
+                    count = int(row[0]) + 1
+                    reset_at = float(row[1])
+                else:
+                    count = 1
+                    reset_at = now + max(0.001, float(window_seconds))
+                cur.execute(
+                    "INSERT INTO projecthub_rate_limits (key, count, reset_at) VALUES (%s, %s, TO_TIMESTAMP(%s)) "
+                    "ON CONFLICT (key) DO UPDATE SET count = EXCLUDED.count, reset_at = EXCLUDED.reset_at",
                     (key, count, reset_at),
                 )
         return {

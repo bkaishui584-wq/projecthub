@@ -3,3 +3,4 @@ python-dotenv>=1.0,<2
 gunicorn>=23,<24
 waitress>=3,<4
 openai>=1,<4
+psycopg[binary]>=3.2,<4
