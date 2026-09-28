@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="ProjectHub——面向大学生的线上项目协作社区。不出门不见面，也能一起把项目做出来。">
-<title>ProjectHub · 大学生线上项目协作社区</title>
+<meta name="description" content="芳菲文学社——青年文学创作与交流平台。让文字被认真读完，让作者彼此看见。">
+<title>芳菲文学社 · 青年文学创作与交流平台</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -34,12 +34,12 @@
           </defs>
         </svg>
       </span>
-      <span class="brand-name">ProjectHub</span>
+      <span class="brand-name">芳菲文学社</span>
     </a>
 
     <div class="topbar-search">
       <i class="fa-solid fa-magnifying-glass ui-icon ui-icon-search" aria-hidden="true"></i>
-      <input id="search-input" type="search" placeholder="搜索项目、专业方向、关键词" autocomplete="off">
+      <input id="search-input" type="search" placeholder="搜索作品、作者、关键词" autocomplete="off">
     </div>
 
     <div class="topbar-actions">
@@ -52,7 +52,7 @@
       <button id="btn-switch" class="btn btn-ghost btn-small" type="button">切换身份</button>
       <button id="btn-theme" class="btn btn-ghost btn-small" type="button">主题</button>
       <button id="btn-logout" class="btn btn-quiet btn-small" type="button" hidden>退出</button>
-      <button id="btn-create" class="btn btn-primary btn-small" type="button">创建项目</button>
+      <button id="btn-create" class="btn btn-primary btn-small" type="button">发布作品</button>
     </div>
   </header>
 
@@ -60,15 +60,15 @@
     <!-- Plaza view -->
     <section id="view-plaza" class="view">
       <div class="plaza-hero container">
-        <p class="plaza-eyebrow">大学生项目协作与科研智能平台</p>
-        <h1>让一个想法，变成一个项目</h1>
-        <p class="plaza-sub">找到队友、明确方向、拆解任务，把一次讨论推进成可执行的项目。</p>
+        <p class="plaza-eyebrow">芳菲文学社 · 青年文学创作与交流平台</p>
+        <h1>让一段文字，被认真读完</h1>
+        <p class="plaza-sub">发表作品、交流阅读、认识作者，把一次灵感变成被看见的文字。</p>
         <div class="plaza-cta">
-          <button id="hero-create" class="btn btn-primary" type="button">创建项目</button>
-          <button id="hero-explore" class="btn btn-ghost" type="button">探索项目</button>
+          <button id="hero-create" class="btn btn-primary" type="button">发布作品</button>
+          <button id="hero-explore" class="btn btn-ghost" type="button">浏览作品</button>
         </div>
         <div class="plaza-stats">
-          <span><strong id="stat-topics">0</strong> 个话题</span>
+          <span><strong id="stat-topics">0</strong> 篇作品</span>
           <span><strong id="stat-members">0</strong> 位同学</span>
         </div>
       </div>
@@ -77,7 +77,7 @@
         <div class="plaza-toolbar">
           <div id="filter-bar" class="filter-bar" aria-label="按方向筛选"></div>
           <div class="project-filter-controls">
-            <select id="category-filter" class="select select-small" aria-label="按项目分类筛选">
+            <select id="category-filter" class="select select-small" aria-label="按作品分类筛选">
               <option value="all">全部分类</option>
               <option value="ai">人工智能</option>
               <option value="robot">机器人</option>
@@ -87,7 +87,7 @@
               <option value="aerospace">航天</option>
               <option value="other">其他</option>
             </select>
-            <select id="status-filter" class="select select-small" aria-label="按项目状态筛选">
+            <select id="status-filter" class="select select-small" aria-label="按作品状态筛选">
               <option value="all">全部状态</option>
               <option value="recruiting">招募中</option>
               <option value="formed">筹备中</option>
@@ -102,9 +102,9 @@
         </div>
         <div id="topic-grid" class="topic-grid"></div>
         <div id="empty-state" class="empty-state" hidden>
-          <p data-empty-title>没有找到匹配的话题</p>
+          <p data-empty-title>没有找到匹配的作品</p>
           <span data-empty-sub>换个关键词或方向试试。</span>
-          <button id="empty-create-btn" class="btn btn-primary" type="button" hidden>发布第一个项目</button>
+          <button id="empty-create-btn" class="btn btn-primary" type="button" hidden>发布第一篇作品</button>
         </div>
       </div>
     </section>
@@ -121,10 +121,10 @@
             <p id="chat-description" class="chat-project-status"></p>
           </div>
           <div class="chat-head-actions">
-            <button id="btn-outcome" class="btn btn-ghost btn-small" type="button" hidden>项目成果</button>
+            <button id="btn-outcome" class="btn btn-ghost btn-small" type="button" hidden>作品成果</button>
             <button id="btn-report" class="btn btn-quiet btn-small" type="button">举报</button>
             <button id="btn-side" class="btn btn-ghost btn-small" type="button">成员 / 文件</button>
-            <button id="btn-delete-topic" class="btn btn-danger btn-small" type="button" hidden>删除项目</button>
+            <button id="btn-delete-topic" class="btn btn-danger btn-small" type="button" hidden>删除作品</button>
           </div>
         </header>
 
@@ -140,13 +140,13 @@
             <p id="chat-code" class="chat-code mono" hidden></p>
             <p id="chat-roles" class="chat-roles" hidden></p>
             <div class="task-section">
-              <div class="task-section-head"><h3 class="side-title">项目任务 <span id="task-count"></span></h3><button id="task-create" class="btn btn-primary btn-small" type="button" hidden>新建任务</button></div>
+              <div class="task-section-head"><h3 class="side-title">作品任务 <span id="task-count"></span></h3><button id="task-create" class="btn btn-primary btn-small" type="button" hidden>新建任务</button></div>
               <ul id="task-list" class="task-list"></ul>
             </div>
             <div id="owner-controls" class="owner-controls" hidden></div>
-            <h3 class="side-title">项目时间线</h3>
+            <h3 class="side-title">作品时间线</h3>
             <ul id="activity-list" class="activity-list"></ul>
-            <h3 class="side-title">项目知识库</h3>
+            <h3 class="side-title">作品知识库</h3>
             <div id="file-upload-wrap" class="file-upload">
               <label class="btn btn-ghost btn-small file-label" for="file-input">上传资料</label>
               <input id="file-input" type="file" accept=".doc,.docx,.pdf,.jpg,.jpeg,.png" hidden>
@@ -202,7 +202,7 @@
   </div>
 </div>
 
-<div id="projecthub-pet" class="projecthub-pet" data-state="idle" role="button" tabindex="0" aria-label="ProjectHub 桌宠，可拖动，点击可以互动">
+<div id="projecthub-pet" class="projecthub-pet" data-state="idle" role="button" tabindex="0" aria-label="芳菲文学社桌宠，可拖动，点击可以互动">
   <span class="pet-bubble" aria-live="polite" hidden></span>
   <img src="assets/pet/pet.svg" alt="" aria-hidden="true" width="710" height="600" decoding="async" draggable="false">
 </div>

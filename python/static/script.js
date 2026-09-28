@@ -33,7 +33,7 @@
     { id: "m27", label: "能源与动力工程", icon: "battery" },
     { id: "m28", label: "航空航天工程", icon: "airplane" }
   ];
-  const ROLE_TAGS = ["项目策划", "技术成员", "设计成员", "文案/材料成员", "调研成员", "答辩成员"];
+  const ROLE_TAGS = ["作品策划", "技术成员", "设计成员", "文案/材料成员", "调研成员", "答辩成员"];
   const GRADES = ["大一", "大二", "大三", "大四", "研一", "研二", "研三"];
   const PROJECT_STATUS_LABELS = { recruiting: "招集中", formed: "已组建", active: "进行中", paused: "已暂停", completed: "已完成", archived: "已归档" };
   const PROJECT_STATUS_NEXT = { recruiting: ["formed", "archived"], formed: ["active", "paused", "archived"], active: ["paused", "completed", "archived"], paused: ["active", "completed", "archived"], completed: ["archived"], archived: [] };
@@ -80,7 +80,7 @@
     qingli: {
       id: "qingli",
       name: "青璃·映界",
-      description: "清透青绿与柔和暖光交织，营造安静、梦幻而轻盈的项目空间。",
+      description: "清透青绿与柔和暖光交织，营造安静、梦幻而轻盈的作品空间。",
       preview: "images/styles/qingli.webp"
     }
   };
@@ -769,7 +769,7 @@ function showThemeChooser() {
       <h2 class="modal-title">选择你喜欢的风格</h2>
 
       <p class="modal-sub">
-        为 ProjectHub 选择一个你喜欢的视觉主题
+        为芳菲文学社选择一个你喜欢的视觉主题
       </p>
 
       <div class="theme-options">
@@ -888,7 +888,7 @@ resetButton.addEventListener("click", () => {
     toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
   }
 
-  /* ================= 话题辅助 ================= */
+  /* ================= 讨论辅助 ================= */
   const isLogged = () => !!(state.user && state.user.id);
   const isAdmin = () => !!(state.user && state.user.role === "admin");
   const isMember = (topic) => !!(state.user && topic.members.some((m) => m.id === state.user.id));
@@ -1025,7 +1025,7 @@ resetButton.addEventListener("click", () => {
     badge.textContent = pending > 99 ? "99+" : String(pending);
   }
 
-  /* ================= 话题广场 ================= */
+  /* ================= 讨论广场 ================= */
   function renderFilterBar() {
     const bar = $("#filter-bar");
     const distinct = [];
@@ -1046,7 +1046,7 @@ resetButton.addEventListener("click", () => {
     const category = PROJECT_CATEGORY_LABELS[projectCategory(t)] || "其他";
     const dirChips = dirs.slice(0, 2).map((id) => '<span class="topic-direction">' + faIcon(majorIcon(id), "inline-icon") + escapeHtml(majorName(id)) + '</span>').join("") +
       (dirs.length > 2 ? '<span class="topic-direction">+' + (dirs.length - 2) + '</span>' : "");
-    const typeBadge = t.type === "public" ? '<span class="badge badge-public">' + faIcon("unlocked", "badge-icon") + '公开话题</span>' : '<span class="badge badge-private">' + faIcon("locked", "badge-icon") + '私密话题</span>';
+    const typeBadge = t.type === "public" ? '<span class="badge badge-public">' + faIcon("unlocked", "badge-icon") + '公开讨论</span>' : '<span class="badge badge-private">' + faIcon("locked", "badge-icon") + '私密讨论</span>';
     const need = (t.neededRoles || []).length ? escapeHtml(t.neededRoles.join(" / ")) : "不限";
     const miss = missingTags(t);
     const missHtml = t.neededRoles && t.neededRoles.length
@@ -1057,8 +1057,8 @@ resetButton.addEventListener("click", () => {
     const appStatus = myAppStatus(t.id);
     const memberCount = Number.isFinite(t.memberCount) ? t.memberCount : t.members.length;
     const full = !member && memberCount >= t.limit;
-    let label = "查看项目", cls = "btn-ghost", actionAttr = 'data-open="' + t.id + '"';
-    if (member) { label = "进入项目"; cls = "btn-primary"; }
+    let label = "查看作品", cls = "btn-ghost", actionAttr = 'data-open="' + t.id + '"';
+    if (member) { label = "进入作品"; cls = "btn-primary"; }
     else if (appStatus === "pending") { label = "取消申请"; cls = "btn-danger"; actionAttr = 'data-cancel-app="' + t.id + '"'; }
     const recruit = t.status === "recruiting" ? '<span class="topic-recruit">正在招募</span>' : "";
     const fullBadge = full ? '<span class="topic-full">已满员</span>' : "";
@@ -1070,7 +1070,7 @@ resetButton.addEventListener("click", () => {
       '<p class="topic-vibe">组内氛围：' + escapeHtml(t.vibe || "负责人还没有填写") + '</p>' +
       '<p class="topic-require">研究方向：' + escapeHtml(topicDirectionLabel(t) || "不限") + '</p>' +
       '<p class="topic-roles">需要角色：' + need + '</p>' + missHtml + '</div>' +
-      '<div class="topic-foot"><span class="topic-owner">负责人 · <strong>' + (t.memberHidden ? "私密项目" : escapeHtml(t.members[0] ? t.members[0].nickname : "—")) + '</strong></span>' +
+      '<div class="topic-foot"><span class="topic-owner">负责人 · <strong>' + (t.memberHidden ? "私密作品" : escapeHtml(t.members[0] ? t.members[0].nickname : "—")) + '</strong></span>' +
       '<span class="topic-actions">' +
         '<button class="btn ' + cls + ' btn-small" type="button" ' + actionAttr + '>' + label + '</button>' +
         '<button class="btn btn-ghost btn-small" type="button" data-share="' + t.id + '">复制链接</button>' +
@@ -1097,7 +1097,7 @@ resetButton.addEventListener("click", () => {
     $("#stat-members").textContent = state.topics.reduce((n, t) => n + (Number.isFinite(t.memberCount) ? t.memberCount : t.members.length), 0);
     const resultCount = $("#result-count");
     if (resultCount) {
-      resultCount.textContent = kw ? ("搜索到 " + list.length + " 个项目") : ((category !== "all" || state.statusFilter !== "all" || state.recruitingOnly) ? ("筛选出 " + list.length + " 个项目") : ("共 " + list.length + " 个项目 · 可搜索名称、简介、研究方向"));
+      resultCount.textContent = kw ? ("搜索到 " + list.length + " 个作品") : ((category !== "all" || state.statusFilter !== "all" || state.recruitingOnly) ? ("筛选出 " + list.length + " 个作品") : ("共 " + list.length + " 个作品 · 可搜索名称、简介、研究方向"));
     }
 
     grid.innerHTML = list.map(topicCard).join("");
@@ -1107,15 +1107,15 @@ resetButton.addEventListener("click", () => {
       const subEl = empty.querySelector("[data-empty-sub]");
       const createBtn = $("#empty-create-btn");
       if (state.topics.length === 0) {
-        titleEl.textContent = "还没有任何项目";
-        subEl.textContent = "发布第一个项目，成为这里的第一个负责人。";
+        titleEl.textContent = "还没有任何作品";
+        subEl.textContent = "发布第一个作品，成为这里的第一个负责人。";
         createBtn.hidden = false;
       } else if (kw) {
-        titleEl.textContent = "没有找到匹配的项目";
-        subEl.textContent = "试试其他项目名称、简介或研究方向。";
+        titleEl.textContent = "没有找到匹配的作品";
+        subEl.textContent = "试试其他作品名称、简介或研究方向。";
         createBtn.hidden = true;
       } else {
-        titleEl.textContent = "当前筛选下没有项目";
+        titleEl.textContent = "当前筛选下没有作品";
         subEl.textContent = "换一个分类、方向或状态再试试。";
         createBtn.hidden = true;
       }
@@ -1142,15 +1142,15 @@ resetButton.addEventListener("click", () => {
         input.value = url; input.setAttribute("readonly", ""); input.style.position = "fixed"; input.style.opacity = "0";
         document.body.appendChild(input); input.select(); document.execCommand("copy"); input.remove();
       }
-      showToast("项目链接已复制");
+      showToast("作品链接已复制");
     } catch (e) {
-      window.prompt("复制项目链接", url);
+      window.prompt("复制作品链接", url);
     }
   }
 
   async function openSharedProject(topicId) {
     if (!topicId) return;
-    if (!state.topics.some((t) => t.id === topicId)) { showToast("项目不存在或暂不可访问"); return; }
+    if (!state.topics.some((t) => t.id === topicId)) { showToast("作品不存在或暂不可访问"); return; }
     await handleOpenTopic(topicId);
   }
 
@@ -1181,7 +1181,7 @@ resetButton.addEventListener("click", () => {
     let mode = opts.mode === "register" ? "register" : "login";
 
     function render() {
-      showModal('<h2 class="modal-title">登录 / 注册</h2><p class="modal-sub">登录后可以发布项目、申请加入、在话题里聊天。</p>' + authFormHtml(mode, d), true);
+      showModal('<h2 class="modal-title">登录 / 注册</h2><p class="modal-sub">登录后可以发布作品、申请加入、在讨论里聊天。</p>' + authFormHtml(mode, d), true);
       const box = modalContent;
       box.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.getAttribute("data-mode"); render(); }));
       box.querySelector("[data-submit]").addEventListener("click", async () => {
@@ -1256,10 +1256,10 @@ resetButton.addEventListener("click", () => {
   function openRoleModal() {
     showModal(
       '<h2 class="modal-title">你是谁？</h2>' +
-      '<p class="modal-sub">选择你的身份，ProjectHub 会带你去到对应的地方。</p>' +
+      '<p class="modal-sub">选择你的身份，芳菲文学社会带你去到对应的地方。</p>' +
       '<div class="role-options">' +
-        '<button class="role-option" type="button" data-role="leader"><span class="role-icon">' + faIcon("office-worker", "role-icon-img") + '</span><h3>项目负责人</h3><p>我有一个项目想法，想创建话题、招募队友。</p></button>' +
-        '<button class="role-option" type="button" data-role="member"><span class="role-icon">' + faIcon("person-raising-hand", "role-icon-img") + '</span><h3>项目成员</h3><p>我想找感兴趣的项目，申请加入团队。</p></button>' +
+        '<button class="role-option" type="button" data-role="leader"><span class="role-icon">' + faIcon("office-worker", "role-icon-img") + '</span><h3>作品负责人</h3><p>我有一个作品想法，想创建讨论、招募队友。</p></button>' +
+        '<button class="role-option" type="button" data-role="member"><span class="role-icon">' + faIcon("person-raising-hand", "role-icon-img") + '</span><h3>作品成员</h3><p>我想找感兴趣的作品，申请加入团队。</p></button>' +
       '</div>' +
       '<p class="form-note note-center note-mt-18"><button class="link-btn" type="button" data-login>' + (isLogged() ? "已登录：" + escapeHtml(state.user.nickname) : "已有账号？直接登录") + '</button></p>', false);
     $("#modal-content [data-role='leader']").addEventListener("click", openLeaderFlow);
@@ -1268,7 +1268,7 @@ resetButton.addEventListener("click", () => {
     if (loginLink) loginLink.addEventListener("click", () => openAuthModal({ mode: "login" }));
   }
 
-  /* ================= 项目负责人流程 ================= */
+  /* ================= 作品负责人流程 ================= */
   function openLeaderFlow() {
     const logged = isLogged();
     const flow = logged ? [0, 1, 3] : [0, 1, 2, 3];
@@ -1287,7 +1287,7 @@ resetButton.addEventListener("click", () => {
       let html = '<div class="wizard-steps">' + flow.map((s, i) => '<div class="wizard-dot' + (i <= idx ? " is-active" : "") + '"></div>').join("") + '</div>';
 
       if (step === 0) {
-        html += '<h2 class="modal-title">你的项目涉及哪些方向？</h2><p class="modal-sub">参考中国高校专业方向，可多选，最多 5 个。</p><div class="major-grid">';
+        html += '<h2 class="modal-title">你的作品涉及哪些方向？</h2><p class="modal-sub">参考中国高校专业方向，可多选，最多 5 个。</p><div class="major-grid">';
         MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.directions.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-major="' + m.id + '">' + faIcon(m.icon, "mj-icon-img") + m.label + '</button>'; });
         html += '</div><p class="wizard-hint">已选 ' + d.directions.length + ' / 5</p><div class="wizard-foot"><button class="btn btn-primary btn-full" type="button" data-next' + (d.directions.length ? "" : " disabled") + '>下一步</button></div>';
         showModal(html, true);
@@ -1305,17 +1305,17 @@ resetButton.addEventListener("click", () => {
       }
 
       else if (step === 1) {
-        html += '<h2 class="modal-title">公开话题还是私密话题？</h2><p class="modal-sub">公开话题按方向申请；私密话题需要 6 位密码才能申请。</p><div class="choice-grid">' +
-          '<button class="choice-card' + (d.type === "public" ? " is-on" : "") + '" type="button" data-type="public"><span class="choice-icon">' + faIcon("unlocked", "choice-icon-img") + '</span><h4>公开话题</h4><p>设置申请加入所需的方向，符合方向的同学可以申请。</p></button>' +
-          '<button class="choice-card' + (d.type === "private" ? " is-on" : "") + '" type="button" data-type="private"><span class="choice-icon">' + faIcon("locked", "choice-icon-img") + '</span><h4>私密话题</h4><p>设置 6 位密码，拿到密码的同学才能申请加入。</p></button>' +
-          '</div><p class="wizard-hint" data-type-hint>' + (d.type ? "已选择：" + (d.type === "public" ? "公开话题" : "私密话题") : "请点击上面的卡片选择话题类型") + '</p>' +
+        html += '<h2 class="modal-title">公开讨论还是私密讨论？</h2><p class="modal-sub">公开讨论按方向申请；私密讨论需要 6 位密码才能申请。</p><div class="choice-grid">' +
+          '<button class="choice-card' + (d.type === "public" ? " is-on" : "") + '" type="button" data-type="public"><span class="choice-icon">' + faIcon("unlocked", "choice-icon-img") + '</span><h4>公开讨论</h4><p>设置申请加入所需的方向，符合方向的同学可以申请。</p></button>' +
+          '<button class="choice-card' + (d.type === "private" ? " is-on" : "") + '" type="button" data-type="private"><span class="choice-icon">' + faIcon("locked", "choice-icon-img") + '</span><h4>私密讨论</h4><p>设置 6 位密码，拿到密码的同学才能申请加入。</p></button>' +
+          '</div><p class="wizard-hint" data-type-hint>' + (d.type ? "已选择：" + (d.type === "public" ? "公开讨论" : "私密讨论") : "请点击上面的卡片选择讨论类型") + '</p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next' + (d.type ? "" : " disabled") + '>下一步</button></div>';
         showModal(html, true);
         const box = modalContent, hint = box.querySelector("[data-type-hint]"), next = box.querySelector("[data-next]");
         box.querySelectorAll("[data-type]").forEach((b) => b.addEventListener("click", () => {
           d.type = b.getAttribute("data-type");
           box.querySelectorAll("[data-type]").forEach((x) => x.classList.toggle("is-on", x === b));
-          hint.textContent = "已选择：" + (d.type === "public" ? "公开话题" : "私密话题");
+          hint.textContent = "已选择：" + (d.type === "public" ? "公开讨论" : "私密讨论");
           next.disabled = false;
         }));
         box.querySelector("[data-prev]").addEventListener("click", () => go(0));
@@ -1323,7 +1323,7 @@ resetButton.addEventListener("click", () => {
       }
 
       else if (step === 2) {
-        html += '<h2 class="modal-title">注册账号</h2><p class="modal-sub">创建项目前，先注册一个账号。</p>' +
+        html += '<h2 class="modal-title">注册账号</h2><p class="modal-sub">创建作品前，先注册一个账号。</p>' +
           '<div class="field"><label>昵称</label><input class="input js-nickname" type="text" placeholder="例如：陈同学" value="' + escapeHtml(d.nickname) + '"></div>' +
           '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 10 位"></div>' +
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
@@ -1359,23 +1359,23 @@ resetButton.addEventListener("click", () => {
       }
 
       else {
-        html += '<h2 class="modal-title">创建项目</h2><p class="modal-sub">项目名称不能重复；创建后会生成一个专属项目编号。</p>';
+        html += '<h2 class="modal-title">创建作品</h2><p class="modal-sub">作品名称不能重复；创建后会生成一个专属作品编号。</p>';
         if (logged) html += '<p class="form-note">将使用你当前账号发布：<strong>' + escapeHtml(state.user.nickname) + '</strong>（无需再次注册）</p>';
-        html += '<div class="field"><label>项目名称</label><input class="input js-title" type="text" placeholder="例如：校园智能垃圾分类系统" value="' + escapeHtml(d.title) + '"></div>' +
-          '<div class="field"><label>项目简介</label><textarea class="textarea js-desc" placeholder="简单说说这个项目想做什么">' + escapeHtml(d.desc) + '</textarea></div>' +
+        html += '<div class="field"><label>作品名称</label><input class="input js-title" type="text" placeholder="例如：校园智能垃圾分类系统" value="' + escapeHtml(d.title) + '"></div>' +
+          '<div class="field"><label>作品简介</label><textarea class="textarea js-desc" placeholder="简单说说这个作品想做什么">' + escapeHtml(d.desc) + '</textarea></div>' +
           '<div class="field"><label>组内氛围</label><input class="input js-vibe" type="text" maxlength="60" placeholder="例如：轻松但高效，每周一次线上同步" value="' + escapeHtml(d.vibe) + '"></div>' +
-          '<div class="form-row"><div class="field"><label>需要人数（含负责人）</label><input class="input js-limit" type="number" min="2" max="50" value="' + d.limit + '"></div><div class="field"><label>话题类型</label><input class="input" type="text" value="' + (d.type === "private" ? "私密话题" : "公开话题") + '" readonly></div></div>' +
+          '<div class="form-row"><div class="field"><label>需要人数（含负责人）</label><input class="input js-limit" type="number" min="2" max="50" value="' + d.limit + '"></div><div class="field"><label>讨论类型</label><input class="input" type="text" value="' + (d.type === "private" ? "私密讨论" : "公开讨论") + '" readonly></div></div>' +
           '<div class="field"><label>需要的成员标签（可多选）</label></div><div class="chip-grid" data-roles>';
         ROLE_TAGS.forEach((t) => { html += '<button class="chip' + (d.neededRoles.indexOf(t) >= 0 ? " is-on" : "") + '" type="button" data-role-tag="' + t + '">' + t + '</button>'; });
         html += '</div><p class="wizard-hint js-role-hint hint-left">已选 ' + d.neededRoles.length + ' 个标签' + (d.neededRoles.length ? '：' + escapeHtml(d.neededRoles.join("、")) : '（可以不选，也可以随时修改）') + '</p>';
         if (d.type === "public") {
-          html += '<div class="field mt-18"><label>申请加入所需的项目方向（可多选，最多 5 个）</label></div><div class="major-grid">';
+          html += '<div class="field mt-18"><label>申请加入所需的作品方向（可多选，最多 5 个）</label></div><div class="major-grid">';
           MAJORS.forEach((m) => { html += '<button class="major-chip' + (d.required.indexOf(m.id) >= 0 ? " is-on" : "") + '" type="button" data-req="' + m.id + '">' + faIcon(m.icon, "mj-icon-img") + m.label + '</button>'; });
           html += '</div>';
         } else {
           html += '<div class="field mt-18"><label>加入密码（6 位数字）</label><input class="input input-code js-code" type="password" inputmode="numeric" maxlength="6" placeholder="000000" value="' + escapeHtml(d.code) + '"></div><p class="form-note">同学申请加入时需要输入这 6 位密码。</p>';
         }
-        html += '<p class="form-error js-create-error" hidden></p><div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>创建项目</button></div>';
+        html += '<p class="form-error js-create-error" hidden></p><div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next>创建作品</button></div>';
         showModal(html, true);
         const box = modalContent;
         const roleHint = box.querySelector(".js-role-hint");
@@ -1407,7 +1407,7 @@ resetButton.addEventListener("click", () => {
           const limit = parseInt(box.querySelector(".js-limit").value, 10);
           const err = box.querySelector(".js-create-error");
           const code = d.type === "private" ? box.querySelector(".js-code").value : "";
-          if (!title) { err.textContent = "请填写项目名称"; err.hidden = false; return; }
+          if (!title) { err.textContent = "请填写作品名称"; err.hidden = false; return; }
           if (!limit || limit < 2 || limit > 50) { err.textContent = "人数限制需要在 2 到 50 之间"; err.hidden = false; return; }
           if (d.type === "public" && !d.required.length) { err.textContent = "请至少选择一个申请加入所需的方向"; err.hidden = false; return; }
           if (d.type === "private" && !/^[0-9]{6}$/.test(code)) { err.textContent = "请设置 6 位数字加入密码"; err.hidden = false; return; }
@@ -1418,9 +1418,9 @@ resetButton.addEventListener("click", () => {
             await refreshTopicList();
             hideModal();
             showPlaza();
-            showToast("项目已创建，项目编号已生成");
+            showToast("作品已创建，作品编号已生成");
           } catch (e) {
-            btn.disabled = false; btn.textContent = "创建项目";
+            btn.disabled = false; btn.textContent = "创建作品";
             err.textContent = e.message || "创建失败"; err.hidden = false;
           }
         });
@@ -1429,7 +1429,7 @@ resetButton.addEventListener("click", () => {
     render(0);
   }
 
-  /* ================= 项目成员流程 ================= */
+  /* ================= 作品成员流程 ================= */
   function openMemberFlow() {
     const d = { directions: [], mode: null, nickname: "", password: "", grade: GRADES[0] };
     const steps = ["擅长方向", "访问方式", "注册 / 登录"];
@@ -1456,9 +1456,9 @@ resetButton.addEventListener("click", () => {
       }
 
       else if (step === 1) {
-        html += '<h2 class="modal-title">如何访问话题广场？</h2><p class="modal-sub">所有同学都能搜索项目；只有登录用户才能申请加入和聊天。</p><div class="choice-grid">' +
-          '<button class="choice-card' + (d.mode === "visitor" ? " is-on" : "") + '" type="button" data-mode="visitor"><span class="choice-icon">' + faIcon("eyes", "choice-icon-img") + '</span><h4>游客访问</h4><p>先逛逛、搜索项目，但不能申请加入。</p></button>' +
-          '<button class="choice-card' + (d.mode === "member" ? " is-on" : "") + '" type="button" data-mode="member"><span class="choice-icon">' + faIcon("check-mark-button", "choice-icon-img") + '</span><h4>登录 / 注册</h4><p>可以申请加入项目，和团队一起聊天。</p></button>' +
+        html += '<h2 class="modal-title">如何访问讨论广场？</h2><p class="modal-sub">所有同学都能搜索作品；只有登录用户才能申请加入和聊天。</p><div class="choice-grid">' +
+          '<button class="choice-card' + (d.mode === "visitor" ? " is-on" : "") + '" type="button" data-mode="visitor"><span class="choice-icon">' + faIcon("eyes", "choice-icon-img") + '</span><h4>游客访问</h4><p>先逛逛、搜索作品，但不能申请加入。</p></button>' +
+          '<button class="choice-card' + (d.mode === "member" ? " is-on" : "") + '" type="button" data-mode="member"><span class="choice-icon">' + faIcon("check-mark-button", "choice-icon-img") + '</span><h4>登录 / 注册</h4><p>可以申请加入作品，和团队一起聊天。</p></button>' +
           '</div><p class="wizard-hint" data-mode-hint>' + (d.mode ? "已选择：" + (d.mode === "visitor" ? "游客访问" : "登录 / 注册") : "请选择访问方式") + '</p>' +
           '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-prev>上一步</button><button class="btn btn-primary" type="button" data-next' + (d.mode ? "" : " disabled") + '>' + (d.mode === "visitor" ? "进入广场" : "下一步") + '</button></div>';
         showModal(html, true);
@@ -1479,7 +1479,7 @@ resetButton.addEventListener("click", () => {
       }
 
       else {
-        html += '<h2 class="modal-title">注册账号</h2><p class="modal-sub">注册后就能申请加入项目。已有账号可以直接登录。</p>' +
+        html += '<h2 class="modal-title">注册账号</h2><p class="modal-sub">注册后就能申请加入作品。已有账号可以直接登录。</p>' +
           '<div class="field"><label>昵称</label><input class="input js-nickname" type="text" placeholder="例如：陈同学"></div>' +
           '<div class="field"><label>密码</label><input class="input js-password" type="password" placeholder="至少 10 位"></div>' +
           '<div class="field"><label>大学几年级</label><select class="select js-grade">' + gradeOptions(d.grade) + '</select></div>' +
@@ -1517,13 +1517,13 @@ resetButton.addEventListener("click", () => {
       hideModal();
       showPlaza();
       if (d.mode !== "visitor") ensureSse();
-      showToast(d.mode === "visitor" ? "已进入话题广场（游客模式）" : "欢迎来到话题广场");
+      showToast(d.mode === "visitor" ? "已进入讨论广场（游客模式）" : "欢迎来到讨论广场");
     }
 
     mount(0);
   }
 
-  /* ================= 打开项目 / 申请加入 ================= */
+  /* ================= 打开作品 / 申请加入 ================= */
   async function refreshTopicList() {
     try { const r = await Store.topics(); state.topics = r.topics || []; renderTopicGrid(); } catch (e) {}
   }
@@ -1533,7 +1533,7 @@ resetButton.addEventListener("click", () => {
     if (!topic) return;
     if (isMember(topic)) { openChat(topicId); return; }
     if (!isLogged()) { showToast("请先登录再申请加入"); openAuthModal({ mode: "register", onDone: () => handleOpenTopic(topicId) }); return; }
-    if (topic.members.length >= topic.limit) { showToast("该项目已经满员"); return; }
+    if (topic.members.length >= topic.limit) { showToast("该作品已经满员"); return; }
     if (myAppStatus(topicId) === "pending") { showToast("申请已提交，正在等待负责人确认"); return; }
     openApplyModal(topic);
   }
@@ -1559,11 +1559,11 @@ resetButton.addEventListener("click", () => {
   function openApplyModal(topic) {
     const privateTopic = topic.type === "private";
     showModal(
-      '<h2 class="modal-title">申请加入项目</h2>' +
+      '<h2 class="modal-title">申请加入作品</h2>' +
       '<p class="modal-sub">你的申请会以私信的形式发送给「' + escapeHtml(topic.members[0] ? topic.members[0].nickname : "负责人") + '」，由负责人决定是否通过。</p>' +
       '<div class="apply-card"><strong>' + escapeHtml(topic.title) + '</strong><span>' + escapeHtml(topicDirectionLabel(topic)) + '</span><span>组内氛围：' + escapeHtml(topic.vibe || "未填写") + '</span></div>' +
       (privateTopic ? '<div class="field"><label>加入密码（6 位数字）</label><input class="input input-code js-code" type="password" inputmode="numeric" maxlength="6" placeholder="000000"></div>' : '') +
-      '<div class="field"><label>给负责人的留言（可选）</label><textarea class="textarea js-message" placeholder="简单介绍一下你的方向、能做什么，或者想在这个项目里学到什么"></textarea></div>' +
+      '<div class="field"><label>给负责人的留言（可选）</label><textarea class="textarea js-message" placeholder="简单介绍一下你的方向、能做什么，或者想在这个作品里学到什么"></textarea></div>' +
       '<p class="form-error js-error" hidden></p>' +
       '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-cancel>取消</button><button class="btn btn-primary" type="button" data-submit>发送申请</button></div>', true);
     const box = modalContent;
@@ -1589,14 +1589,14 @@ resetButton.addEventListener("click", () => {
     });
   }
 
-  /* ================= 删除项目 ================= */
+  /* ================= 删除作品 ================= */
   function openDeleteModal(topic) {
-    if (!isLeader(topic)) { showToast("只有项目负责人或管理员才能删除该项目"); return; }
+    if (!isLeader(topic)) { showToast("只有作品负责人或管理员才能删除该作品"); return; }
     showModal(
-      '<h2 class="modal-title">确认删除这个项目？</h2>' +
-      '<p class="modal-sub">「' + escapeHtml(topic.title) + '」删除后，话题内的聊天记录、成员和文件都会被一并移除，且无法恢复。</p>' +
-      '<p class="form-note">项目编号：<span class="mono">' + escapeHtml(topic.code || "—") + '</span></p>' +
-      '<label class="confirm-check"><input type="checkbox" class="js-confirm"><span>我确认要删除这个项目，并知道<strong>删除后无法恢复</strong>。</span></label>' +
+      '<h2 class="modal-title">确认删除这个作品？</h2>' +
+      '<p class="modal-sub">「' + escapeHtml(topic.title) + '」删除后，讨论内的聊天记录、成员和文件都会被一并移除，且无法恢复。</p>' +
+      '<p class="form-note">作品编号：<span class="mono">' + escapeHtml(topic.code || "—") + '</span></p>' +
+      '<label class="confirm-check"><input type="checkbox" class="js-confirm"><span>我确认要删除这个作品，并知道<strong>删除后无法恢复</strong>。</span></label>' +
       '<div class="wizard-foot"><button class="btn btn-quiet" type="button" data-cancel>取消</button><button class="btn btn-danger" type="button" data-confirm disabled>确认删除</button></div>', true);
     const box = modalContent;
     const check = box.querySelector(".js-confirm");
@@ -1611,7 +1611,7 @@ resetButton.addEventListener("click", () => {
         await refreshTopicList();
         if (currentTopicId === topic.id) showPlaza();
         hideModal();
-        showToast("项目已删除");
+        showToast("作品已删除");
       } catch (e) {
         confirmBtn.disabled = false; confirmBtn.textContent = "确认删除";
         showToast(e.message || "删除失败");
@@ -1622,7 +1622,7 @@ resetButton.addEventListener("click", () => {
   /* ================= 消息中心（私信） ================= */
   async function openInboxModal() {
     if (!isLogged()) { openAuthModal({ mode: "login" }); return; }
-    showModal('<h2 class="modal-title">消息中心</h2><p class="modal-sub">同学申请加入你的项目时，会在这里以私信的形式出现。</p><div data-inbox-body><p class="modal-sub">正在加载…</p></div>', true);
+    showModal('<h2 class="modal-title">消息中心</h2><p class="modal-sub">同学申请加入你的作品时，会在这里以私信的形式出现。</p><div data-inbox-body><p class="modal-sub">正在加载…</p></div>', true);
     await loadPrivateData();
     renderHeader();
     renderInboxBody();
@@ -1633,7 +1633,7 @@ resetButton.addEventListener("click", () => {
     if (!box) return;
     const list = state.inbox.slice().sort((a, b) => (a.status === "pending" ? -1 : 0) - (b.status === "pending" ? -1 : 0) || b.createdAt - a.createdAt);
     if (!list.length) {
-      box.innerHTML = '<div class="empty-inbox">暂时没有收到申请。<br>等你的项目有人申请时，这里会出现他们的私信。</div>';
+      box.innerHTML = '<div class="empty-inbox">暂时没有收到申请。<br>等你的作品有人申请时，这里会出现他们的私信。</div>';
       return;
     }
     box.innerHTML = '<ul class="msg-list">' + list.map((a) => {
@@ -1644,7 +1644,7 @@ resetButton.addEventListener("click", () => {
         '<span class="msg-avatar">' + escapeHtml((a.nickname || "同").slice(0, 1)) + '</span>' +
         '<div class="msg-body">' +
           '<div class="msg-head"><strong>' + escapeHtml(a.nickname) + '</strong><span class="msg-sub">' + escapeHtml(a.grade || "") + ' · ' + formatDate(a.createdAt) + '</span></div>' +
-          '<p class="msg-text">申请加入《' + escapeHtml(a.topicTitle || "项目") + '》</p>' +
+          '<p class="msg-text">申请加入《' + escapeHtml(a.topicTitle || "作品") + '》</p>' +
           (a.message ? '<p class="msg-quote">留言：' + escapeHtml(a.message) + '</p>' : '') +
           statusHtml +
         '</div></li>';
@@ -1661,15 +1661,15 @@ resetButton.addEventListener("click", () => {
       await refreshTopicList();
       renderHeader();
       renderInboxBody();
-      showToast(action === "approve" ? "已同意对方加入项目" : "已婉拒这次申请");
+      showToast(action === "approve" ? "已同意对方加入作品" : "已婉拒这次申请");
     } catch (e) { showToast(e.message || "操作失败"); }
   }
 
   /* ================= 管理员后台 ================= */
   function openAdminPanel() {
     if (!isAdmin()) { showToast("需要管理员权限"); return; }
-    const tabs = [["stats", "概览"], ["users", "用户"], ["projects", "项目"], ["announcements", "公告"], ["reports", "举报"], ["appeals", "申诉"], ["penalties", "处罚"], ["files", "文件"], ["logs", "日志"]];
-    showModal('<h2 class="modal-title">管理中心</h2><p class="modal-sub">管理员可以处理公告、账号、项目、举报与安全记录。</p>' +
+    const tabs = [["stats", "概览"], ["users", "用户"], ["projects", "作品"], ["announcements", "公告"], ["reports", "举报"], ["appeals", "申诉"], ["penalties", "处罚"], ["files", "文件"], ["logs", "日志"]];
+    showModal('<h2 class="modal-title">管理中心</h2><p class="modal-sub">管理员可以处理公告、账号、作品、举报与安全记录。</p>' +
       '<div class="auth-tabs admin-tabs">' + tabs.map((t, i) => '<button class="auth-tab' + (i === 0 ? " is-on" : "") + '" type="button" data-tab="' + t[0] + '">' + t[1] + '</button>').join("") + '</div>' +
       '<div data-admin-body><p class="modal-sub">正在加载…</p></div>', true);
     const box = modalContent;
@@ -1688,7 +1688,7 @@ resetButton.addEventListener("click", () => {
       if (tab === "stats") {
         const r = await Store.adminStats();
         const s = r.stats || {};
-        const items = [["注册用户", s.users], ["项目话题", s.topics], ["聊天消息", s.messages], ["共享文件", s.files], ["待处理举报", s.reportsOpen], ["待处理申诉", s.appealsOpen], ["已发布公告", s.announcementsPublished], ["审计日志", s.auditLogs]];
+        const items = [["注册用户", s.users], ["作品讨论", s.topics], ["聊天消息", s.messages], ["共享文件", s.files], ["待处理举报", s.reportsOpen], ["待处理申诉", s.appealsOpen], ["已发布公告", s.announcementsPublished], ["审计日志", s.auditLogs]];
         box.innerHTML = '<div class="admin-stats">' + items.map((x) => '<div class="admin-stat"><strong>' + Number(x[1] || 0) + '</strong><span>' + x[0] + '</span></div>').join("") + '</div>';
       } else if (tab === "users") {
         const r = await Store.adminUsers();
@@ -1697,7 +1697,7 @@ resetButton.addEventListener("click", () => {
           const actions = u.role === "admin" ? '<span class="admin-meta">管理员账号</span>' : '<button class="btn btn-quiet btn-small" data-mute="' + u.id + '" data-muted="' + (muted ? "1" : "0") + '">' + (muted ? "解除禁言" : "禁言") + '</button><button class="btn ' + (u.banned ? "btn-ghost" : "btn-danger") + ' btn-small" data-ban="' + u.id + '" data-banned="' + (u.banned ? "1" : "0") + '">' + (u.banned ? "解封" : "封禁") + '</button>';
           return '<li class="admin-row"><span class="m-avatar">' + escapeHtml((u.nickname || "用").slice(0, 1)) + '</span>' +
             '<span class="admin-name">' + escapeHtml(u.nickname || "用户") + '<em>' + escapeHtml(u.grade || "") + ' · ' + (u.role === "admin" ? "管理员" : "普通用户") + (u.banned ? " · 已封禁" : "") + (muted ? " · 已禁言" : "") + '</em></span>' +
-            '<span class="admin-meta">' + Number(u.topicCount || 0) + ' 个项目</span>' + actions + '</li>';
+            '<span class="admin-meta">' + Number(u.topicCount || 0) + ' 个作品</span>' + actions + '</li>';
         }).join("") + '</ul>';
         box.querySelectorAll("[data-ban]").forEach((b) => b.addEventListener("click", async () => {
           const banned = b.getAttribute("data-banned") === "1";
@@ -1754,7 +1754,7 @@ resetButton.addEventListener("click", () => {
         const r = await Store.adminReports();
         const list = r.reports || [];
         box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((rep) =>
-          '<li class="admin-row"><span class="admin-name">' + escapeHtml(rep.reason) + '<em>' + escapeHtml((rep.topicTitle || "（无关联项目）")) + ' · 举报人：' + escapeHtml(rep.reporterName || "") + ' · ' + formatDate(rep.createdAt) + (rep.status === "resolved" ? " · 已处理（" + escapeHtml(rep.handledBy || "") + "）" : "") + '</em></span>' +
+          '<li class="admin-row"><span class="admin-name">' + escapeHtml(rep.reason) + '<em>' + escapeHtml((rep.topicTitle || "（无关联作品）")) + ' · 举报人：' + escapeHtml(rep.reporterName || "") + ' · ' + formatDate(rep.createdAt) + (rep.status === "resolved" ? " · 已处理（" + escapeHtml(rep.handledBy || "") + "）" : "") + '</em></span>' +
           (rep.detail ? '<span class="admin-meta">' + escapeHtml(rep.detail.slice(0, 60)) + '</span>' : "") +
           (rep.status === "open" ? '<button class="btn btn-primary btn-small" data-resolve="' + rep.id + '">标记已处理</button><button class="btn btn-quiet btn-small" data-dismiss="' + rep.id + '">忽略</button>' : "") +
           '</li>').join("") + '</ul>' : '<div class="empty-inbox">暂无举报记录。</div>';
@@ -1789,7 +1789,7 @@ resetButton.addEventListener("click", () => {
       } else if (tab === "files") {
         const r = await Store.adminFiles();
         const list = r.files || [];
-        box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((f) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(f.name) + '<em>' + escapeHtml(f.topicTitle || "未知项目") + ' · ' + escapeHtml(f.uploaderName || "") + ' · ' + formatSize(f.size) + '</em></span><button class="btn btn-danger btn-small" data-file-delete="' + f.id + '">删除文件</button></li>').join("") + '</ul>' : '<div class="empty-inbox">暂无共享文件。</div>';
+        box.innerHTML = list.length ? '<ul class="admin-list">' + list.map((f) => '<li class="admin-row"><span class="admin-name">' + escapeHtml(f.name) + '<em>' + escapeHtml(f.topicTitle || "未知作品") + ' · ' + escapeHtml(f.uploaderName || "") + ' · ' + formatSize(f.size) + '</em></span><button class="btn btn-danger btn-small" data-file-delete="' + f.id + '">删除文件</button></li>').join("") + '</ul>' : '<div class="empty-inbox">暂无共享文件。</div>';
         box.querySelectorAll("[data-file-delete]").forEach((b) => b.addEventListener("click", async () => {
           if (!window.confirm("确认删除这个文件？删除后无法恢复。")) return;
           try { await Store.adminDeleteFile(b.getAttribute("data-file-delete")); renderAdmin("files"); showToast("文件已删除"); }
@@ -1803,9 +1803,9 @@ resetButton.addEventListener("click", () => {
         const r = await Store.adminTopics();
         const topics = r.topics || [];
         box.innerHTML = topics.length ? '<ul class="admin-list">' + topics.map((t) =>
-          '<li class="admin-row"><span class="admin-name">' + escapeHtml(t.title) + '<em>' + escapeHtml(t.type === "private" ? "私密话题" : "公开话题") + ' · 编号 ' + escapeHtml(t.code || "—") + ' · ' + Number(t.memberCount || 0) + '/' + Number(t.limit || 0) + ' 人 · ' + escapeHtml(PROJECT_STATUS_LABELS[t.status] || t.status || "招集中") + '</em></span>' +
-          '<button class="btn btn-danger btn-small" data-admin-delete="' + t.id + '">删除项目</button></li>').join("") + '</ul>'
-          : '<div class="empty-inbox">现在还没有任何项目。</div>';
+          '<li class="admin-row"><span class="admin-name">' + escapeHtml(t.title) + '<em>' + escapeHtml(t.type === "private" ? "私密讨论" : "公开讨论") + ' · 编号 ' + escapeHtml(t.code || "—") + ' · ' + Number(t.memberCount || 0) + '/' + Number(t.limit || 0) + ' 人 · ' + escapeHtml(PROJECT_STATUS_LABELS[t.status] || t.status || "招集中") + '</em></span>' +
+          '<button class="btn btn-danger btn-small" data-admin-delete="' + t.id + '">删除作品</button></li>').join("") + '</ul>'
+          : '<div class="empty-inbox">现在还没有任何作品。</div>';
         box.querySelectorAll("[data-admin-delete]").forEach((b) => b.addEventListener("click", () => {
           const topic = topics.find((t) => t.id === b.getAttribute("data-admin-delete"));
           if (topic) openDeleteModal(topic);
@@ -1994,16 +1994,16 @@ resetButton.addEventListener("click", () => {
     renderReplyBar();
 
     $("#chat-title").textContent = topic.title;
-    const typeText = topic.type === "public" ? ("公开话题 · 申请需要 " + (requiredLabels(topic) || "不限")) : "私密话题 · 需要 6 位密码";
+    const typeText = topic.type === "public" ? ("公开讨论 · 申请需要 " + (requiredLabels(topic) || "不限")) : "私密讨论 · 需要 6 位密码";
     const owner = topic.members.find((m) => m.id === topic.creatorId);
     $("#chat-meta").innerHTML = escapeHtml(typeText) + " · " + escapeHtml(topicDirectionLabel(topic)) + " · 负责人：" + escapeHtml(owner ? owner.nickname : "—") + " · <span class='mono'>" + topic.members.length + "/" + topic.limit + "</span>";
-    const descriptionEl = $("#chat-description"); if (descriptionEl) descriptionEl.textContent = "项目简介：" + (topic.desc || "暂无简介");
+    const descriptionEl = $("#chat-description"); if (descriptionEl) descriptionEl.textContent = "作品简介：" + (topic.desc || "暂无简介");
     $("#chat-member-count").textContent = topic.members.length + "/" + topic.limit;
 
     const vibeEl = $("#chat-vibe");
     if (vibeEl) vibeEl.textContent = "组内氛围：" + (topic.vibe || "负责人还没有填写");
     const codeEl = $("#chat-code");
-    if (codeEl) { if (topic.code && canManage) { codeEl.hidden = false; codeEl.textContent = "项目编号：" + topic.code; } else codeEl.hidden = true; }
+    if (codeEl) { if (topic.code && canManage) { codeEl.hidden = false; codeEl.textContent = "作品编号：" + topic.code; } else codeEl.hidden = true; }
     const missing = missingTags(topic);
     const rolesInfo = (topic.neededRoles || []).length
       ? ("需要角色：" + topic.neededRoles.join(" / ") + (missing.length ? "　还缺：" + missing.join(" / ") : "　角色已齐 ✓"))
@@ -2012,7 +2012,7 @@ resetButton.addEventListener("click", () => {
     if (rolesEl) { rolesEl.textContent = rolesInfo; rolesEl.hidden = !rolesInfo; }
     const status = topic.status || "recruiting";
     const statusEl = $("#chat-project-status");
-    if (statusEl) statusEl.innerHTML = `项目状态：<strong class="status-pill status-${escapeHtml(status)}">${escapeHtml(PROJECT_STATUS_LABELS[status] || status)}</strong> · 创建：${escapeHtml(formatDate(topic.createdAt))} · 更新：${escapeHtml(formatDate(topic.updatedAt || topic.statusAt || topic.createdAt))}`;
+    if (statusEl) statusEl.innerHTML = `作品状态：<strong class="status-pill status-${escapeHtml(status)}">${escapeHtml(PROJECT_STATUS_LABELS[status] || status)}</strong> · 创建：${escapeHtml(formatDate(topic.createdAt))} · 更新：${escapeHtml(formatDate(topic.updatedAt || topic.statusAt || topic.createdAt))}`;
     const ownerControls = $("#owner-controls");
     if (ownerControls) {
       if (!canManage) { ownerControls.hidden = true; ownerControls.innerHTML = ""; }
@@ -2026,7 +2026,7 @@ resetButton.addEventListener("click", () => {
         ownerControls.querySelectorAll("[data-project-status]").forEach((btn) => btn.addEventListener("click", async () => {
           const next = btn.getAttribute("data-project-status");
           btn.disabled = true;
-          try { await Store.setProjectStatus(topic.id, next); await refreshTopicList(); await refreshAll(); showToast("项目状态已更新为「" + (PROJECT_STATUS_LABELS[next] || next) + "」"); }
+          try { await Store.setProjectStatus(topic.id, next); await refreshTopicList(); await refreshAll(); showToast("作品状态已更新为「" + (PROJECT_STATUS_LABELS[next] || next) + "」"); }
           catch (e) { btn.disabled = false; showToast(e.message || "状态更新失败"); }
         }));
         const ownerBtn = ownerControls.querySelector("[data-owner-transfer]");
@@ -2097,7 +2097,7 @@ resetButton.addEventListener("click", () => {
   function renderActivityList(topic) {
     const listEl = $("#activity-list"); if (!listEl) return;
     const items = topic.activities || [];
-    listEl.innerHTML = items.length ? items.map((item) => '<li class="activity-item"><strong>' + escapeHtml(item.actorName || "系统") + '</strong><span>' + escapeHtml(item.text || "") + '</span><time>' + escapeHtml(formatDate(item.at)) + '</time></li>').join("") : '<li class="activity-empty">还没有项目动态。</li>';
+    listEl.innerHTML = items.length ? items.map((item) => '<li class="activity-item"><strong>' + escapeHtml(item.actorName || "系统") + '</strong><span>' + escapeHtml(item.text || "") + '</span><time>' + escapeHtml(formatDate(item.at)) + '</time></li>').join("") : '<li class="activity-empty">还没有作品动态。</li>';
   }
 
   function renderResourceList(topic) {
@@ -2109,7 +2109,7 @@ resetButton.addEventListener("click", () => {
 
   function openResourceModal(topic, kind) {
     const isLink = kind === "link";
-    showModal('<h2 class="modal-title">' + (isLink ? "添加外部链接" : "添加项目笔记") + '</h2><div class="field"><label>标题</label><input class="input js-resource-title" maxlength="80"></div>' + (isLink ? '<div class="field"><label>链接</label><input class="input js-resource-url" type="url" placeholder="https://"></div>' : '<div class="field"><label>内容</label><textarea class="textarea js-resource-content" maxlength="5000"></textarea></div>') + '<p class="form-error js-resource-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-resource-save>保存</button></div>', true);
+    showModal('<h2 class="modal-title">' + (isLink ? "添加外部链接" : "添加作品笔记") + '</h2><div class="field"><label>标题</label><input class="input js-resource-title" maxlength="80"></div>' + (isLink ? '<div class="field"><label>链接</label><input class="input js-resource-url" type="url" placeholder="https://"></div>' : '<div class="field"><label>内容</label><textarea class="textarea js-resource-content" maxlength="5000"></textarea></div>') + '<p class="form-error js-resource-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-resource-save>保存</button></div>', true);
     modalContent.querySelector("[data-resource-save]").addEventListener("click", async () => { const title = modalContent.querySelector(".js-resource-title").value.trim(); const url = isLink ? modalContent.querySelector(".js-resource-url").value.trim() : ""; const content = isLink ? "" : modalContent.querySelector(".js-resource-content").value.trim(); try { await Store.createResource(topic.id, { kind: kind, title: title, url: url, content: content }); hideModal(); await refreshTopicList(); renderChat(topic.id); showToast("资料已保存"); } catch (e) { const err = modalContent.querySelector(".js-resource-error"); err.textContent = e.message || "保存失败"; err.hidden = false; } });
   }
 
@@ -2119,27 +2119,27 @@ resetButton.addEventListener("click", () => {
     const links = (value.links || []).map((x) => '<a href="' + escapeHtml(x.url || "#") + '" target="_blank" rel="noopener">' + escapeHtml(x.label || x.url || "成果链接") + '</a>').join(" · ");
     if (!editable) {
       const memberHtml = (topic.members || []).map((m) => '<li>' + escapeHtml(m.nickname || "成员") + (m.tag ? ' · ' + escapeHtml(m.tag) : "") + '</li>').join("") || '<li>暂无成员信息</li>';
-      const fileItems = (state.files[topic.id] || []).map((f) => '<li>' + escapeHtml(f.name || "项目文件") + '</li>').join("") || '<li>暂无项目文件</li>';
-      const outcomeText = value.final || value.process || value.summary || "暂无项目成果";
+      const fileItems = (state.files[topic.id] || []).map((f) => '<li>' + escapeHtml(f.name || "作品文件") + '</li>').join("") || '<li>暂无作品文件</li>';
+      const outcomeText = value.final || value.process || value.summary || "暂无作品成果";
       showModal(
-        '<h2 class="modal-title">项目成果</h2><p class="modal-sub">' + escapeHtml(topic.title) + '</p>' +
-        '<div class="outcome-view"><h3>项目简介</h3><p>' + escapeHtml(value.summary || topic.desc || "暂无项目简介") + '</p>' +
+        '<h2 class="modal-title">作品成果</h2><p class="modal-sub">' + escapeHtml(topic.title) + '</p>' +
+        '<div class="outcome-view"><h3>作品简介</h3><p>' + escapeHtml(value.summary || topic.desc || "暂无作品简介") + '</p>' +
         '<h3>团队成员</h3><ul>' + memberHtml + '</ul>' +
-        '<h3>项目方向</h3><p>' + escapeHtml(topicDirectionLabel(topic) || "暂未设置研究方向") + '</p>' +
-        '<h3>项目状态</h3><p>' + escapeHtml(PROJECT_STATUS_LABELS[topic.status] || topic.status || "未设置") + '</p>' +
-        '<h3>项目文件</h3><ul>' + fileItems + '</ul>' +
-        '<h3>项目成果</h3><p>' + escapeHtml(outcomeText) + '</p>' +
+        '<h3>作品方向</h3><p>' + escapeHtml(topicDirectionLabel(topic) || "暂未设置研究方向") + '</p>' +
+        '<h3>作品状态</h3><p>' + escapeHtml(PROJECT_STATUS_LABELS[topic.status] || topic.status || "未设置") + '</p>' +
+        '<h3>作品文件</h3><ul>' + fileItems + '</ul>' +
+        '<h3>作品成果</h3><p>' + escapeHtml(outcomeText) + '</p>' +
         '<h3>成果链接</h3><p>' + (links || "暂无成果链接") + '</p>' +
         '<h3>获奖信息</h3><p>' + escapeHtml(value.awards || "暂无获奖信息") + '</p></div>', true);
       return;
     }
     const linkText = (value.links || []).map((x) => x.label + ' | ' + x.url).join("\n");
-    showModal('<h2 class="modal-title">编辑项目成果</h2><p class="modal-sub">没有填写的内容会保留为“暂无项目成果”。</p><div class="field"><label>项目简介</label><textarea class="textarea js-outcome-summary" maxlength="1000">' + escapeHtml(value.summary || topic.desc || "") + '</textarea></div><div class="field"><label>项目过程</label><textarea class="textarea js-outcome-process" maxlength="5000">' + escapeHtml(value.process || "") + '</textarea></div><div class="field"><label>最终成果</label><textarea class="textarea js-outcome-final" maxlength="5000">' + escapeHtml(value.final || "") + '</textarea></div><div class="field"><label>成果链接（每行：名称 | URL）</label><textarea class="textarea js-outcome-links" maxlength="5000">' + escapeHtml(linkText) + '</textarea></div><div class="field"><label>获奖信息（可选）</label><input class="input js-outcome-awards" maxlength="1000" value="' + escapeHtml(value.awards || "") + '"></div><p class="form-error js-outcome-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-outcome-save>保存成果</button></div>', true);
+    showModal('<h2 class="modal-title">编辑作品成果</h2><p class="modal-sub">没有填写的内容会保留为“暂无作品成果”。</p><div class="field"><label>作品简介</label><textarea class="textarea js-outcome-summary" maxlength="1000">' + escapeHtml(value.summary || topic.desc || "") + '</textarea></div><div class="field"><label>作品过程</label><textarea class="textarea js-outcome-process" maxlength="5000">' + escapeHtml(value.process || "") + '</textarea></div><div class="field"><label>最终成果</label><textarea class="textarea js-outcome-final" maxlength="5000">' + escapeHtml(value.final || "") + '</textarea></div><div class="field"><label>成果链接（每行：名称 | URL）</label><textarea class="textarea js-outcome-links" maxlength="5000">' + escapeHtml(linkText) + '</textarea></div><div class="field"><label>获奖信息（可选）</label><input class="input js-outcome-awards" maxlength="1000" value="' + escapeHtml(value.awards || "") + '"></div><p class="form-error js-outcome-error" hidden></p><div class="wizard-foot"><button class="btn btn-primary" type="button" data-outcome-save>保存成果</button></div>', true);
     modalContent.querySelector("[data-outcome-save]").addEventListener("click", async () => {
       const linkValues = modalContent.querySelector(".js-outcome-links").value.split("\n").map((line) => { const i = line.indexOf("|"); return i < 0 ? null : { label: line.slice(0, i).trim(), url: line.slice(i + 1).trim() }; }).filter(Boolean);
       try {
         await Store.saveOutcome(topic.id, { summary: modalContent.querySelector(".js-outcome-summary").value, process: modalContent.querySelector(".js-outcome-process").value, final: modalContent.querySelector(".js-outcome-final").value, links: linkValues, awards: modalContent.querySelector(".js-outcome-awards").value });
-        hideModal(); await refreshTopicList(); const latest = state.topics.find((t) => t.id === topic.id); if (latest) renderChat(topic.id); showToast("项目成果已保存");
+        hideModal(); await refreshTopicList(); const latest = state.topics.find((t) => t.id === topic.id); if (latest) renderChat(topic.id); showToast("作品成果已保存");
       } catch (e) { const err = modalContent.querySelector(".js-outcome-error"); err.textContent = e.message || "保存失败"; err.hidden = false; }
     });
   }
@@ -2359,8 +2359,8 @@ resetButton.addEventListener("click", () => {
           renderTopicGrid();
         } else if (currentTopicId) {
           const live = state.topics.find((t) => t.id === currentTopicId);
-          if (!live) { showPlaza(); showToast("该项目已被负责人删除"); return; }
-          if (!isMember(live) && !isAdmin()) { showPlaza(); showToast("你已被移出该项目"); return; }
+          if (!live) { showPlaza(); showToast("该作品已被负责人删除"); return; }
+          if (!isMember(live) && !isAdmin()) { showPlaza(); showToast("你已被移出该作品"); return; }
           renderChat(currentTopicId);
         }
       }
@@ -2378,7 +2378,7 @@ resetButton.addEventListener("click", () => {
             const old = prev.find((p) => p.topicId === a.topicId);
             if (a.status === "approved" && old && old.status === "pending") {
               const t = state.topics.find((x) => x.id === a.topicId);
-              showToast("你的申请已通过：" + (t ? t.title : "项目"));
+              showToast("你的申请已通过：" + (t ? t.title : "作品"));
             }
           });
           if ($("#view-plaza").hidden === false) renderTopicGrid();
@@ -2412,7 +2412,7 @@ resetButton.addEventListener("click", () => {
         const mj = JSON.stringify(r.messages || []);
         if (mj !== sig.chat) { sig.chat = mj; state.messages[currentTopicId] = r.messages || []; renderChat(currentTopicId); }
       } catch (e) {
-        if (e && e.status === 403) { showPlaza(); showToast("你已不在该项目中，无法查看聊天"); return; }
+        if (e && e.status === 403) { showPlaza(); showToast("你已不在该作品中，无法查看聊天"); return; }
       }
       try {
         const r = await Store.files(currentTopicId);
@@ -2512,8 +2512,8 @@ resetButton.addEventListener("click", () => {
   function openNotifications() {
     if (!isLogged()) { openAuthModal({ mode: "login" }); return; }
     const list = state.notifications || [];
-    const typeLabel = { NEW_MESSAGE: "新消息", MENTION: "@ 提醒", PROJECT_APPLICATION: "入组申请", APPLICATION_CANCELLED: "取消申请", APPLICATION_ACCEPTED: "申请通过", APPLICATION_REJECTED: "申请结果", MEMBER_REMOVED: "移出项目", FILE_UPLOADED: "新文件", PROJECT_UPDATE: "项目公告", TASK_ASSIGNMENT: "任务分配", REPORT_CREATED: "举报", SYSTEM_NOTIFICATION: "系统通知", ANNOUNCEMENT: "全站公告", SECURITY: "安全提醒", PROJECT_STATUS: "项目状态", OWNER_TRANSFER: "负责人转移", APPEAL_RESULT: "申诉结果", PENALTY_APPLIED: "处罚通知", REPORT_HANDLED: "举报处理", message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出项目", file: "新文件", announcement: "项目公告" };
-    showModal('<h2 class="modal-title">消息提醒</h2><p class="modal-sub">有人发消息、@ 你，或者项目有变化时，会在这里提醒你。</p>' +
+    const typeLabel = { NEW_MESSAGE: "新消息", MENTION: "@ 提醒", PROJECT_APPLICATION: "入组申请", APPLICATION_CANCELLED: "取消申请", APPLICATION_ACCEPTED: "申请通过", APPLICATION_REJECTED: "申请结果", MEMBER_REMOVED: "移出作品", FILE_UPLOADED: "新文件", PROJECT_UPDATE: "作品公告", TASK_ASSIGNMENT: "任务分配", REPORT_CREATED: "举报", SYSTEM_NOTIFICATION: "系统通知", ANNOUNCEMENT: "全站公告", SECURITY: "安全提醒", PROJECT_STATUS: "作品状态", OWNER_TRANSFER: "负责人转移", APPEAL_RESULT: "申诉结果", PENALTY_APPLIED: "处罚通知", REPORT_HANDLED: "举报处理", message: "新消息", mention: "@ 提醒", apply: "入组申请", application_cancelled: "取消申请", approved: "申请通过", rejected: "申请结果", removed: "移出作品", file: "新文件", announcement: "作品公告" };
+    showModal('<h2 class="modal-title">消息提醒</h2><p class="modal-sub">有人发消息、@ 你，或者作品有变化时，会在这里提醒你。</p>' +
       (list.length ? '<ul class="msg-list">' + list.map((n) =>
         '<li class="msg-row bell-row" data-notif="' + n.id + '" data-topic="' + (n.topicId || "") + '">' +
         '<span class="msg-avatar">' + (n.from ? escapeHtml(n.from.slice(0, 1)) : faIcon("bell", "msg-avatar-icon")) + '</span>' +
@@ -2535,8 +2535,8 @@ resetButton.addEventListener("click", () => {
       if (topicId) {
         const t = state.topics.find((x) => x.id === topicId);
         if (t && (isMember(t) || isAdmin())) openChat(topicId);
-        else if (t) showToast("你需要先加入这个项目才能查看");
-        else showToast("该项目已不存在");
+        else if (t) showToast("你需要先加入这个作品才能查看");
+        else showToast("该作品已不存在");
       }
       try { await Store.readNotifications({ all: true }); } catch (e) {}
       await loadNotifications();
@@ -2668,12 +2668,12 @@ resetButton.addEventListener("click", () => {
     if (!bubble || !image) return null;
 
     const messages = [
-      "今天也要一起把项目做出来。",
+      "今天也要一起把作品做出来。",
       "需要我帮你看着进度吗？",
       "有新消息时我会提醒你。",
       "记得把想法写下来，再做下一步。",
       "先休息一会儿，回来继续。",
-      "我来陪你把这个项目推进一步。"
+      "我来陪你把这个作品推进一步。"
     ];
     let stateTimer = null;
     let bubbleTimer = null;

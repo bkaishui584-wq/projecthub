@@ -11,6 +11,7 @@ import contextlib
 from contextlib import contextmanager
 import json
 import os
+import re
 import sqlite3
 
 try:
@@ -224,15 +225,25 @@ class PostgresStateManager(StateManager):
         super().__init__("", legacy_file)
         self.database_url = database_url
         self.sslmode = os.environ.get("DATABASE_SSL", "require") or "require"
+        self.schema = os.environ.get("DB_SCHEMA", "public").strip() or "public"
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.schema):
+            raise RuntimeError("DB_SCHEMA 只能包含字母、数字和下划线")
+        self._schema_ready = False
 
     def connect(self):
         if psycopg is None:
             raise RuntimeError("PostgreSQL 依赖未安装")
-        return psycopg.connect(self.database_url, sslmode=self.sslmode)
+        db = psycopg.connect(self.database_url, sslmode=self.sslmode)
+        if self._schema_ready:
+            with db.cursor() as cur:
+                cur.execute(f'SET search_path TO "{self.schema}"')
+        return db
 
     def init(self) -> None:
         with self.connection() as db:
             with db.cursor() as cur:
+                cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{self.schema}"')
+                cur.execute(f'SET search_path TO "{self.schema}"')
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS projecthub_state (
@@ -267,6 +278,7 @@ class PostgresStateManager(StateManager):
                     "ON CONFLICT (id) DO NOTHING",
                     ("{}",),
                 )
+        self._schema_ready = True
         self.load()
 
     def load(self) -> None:
