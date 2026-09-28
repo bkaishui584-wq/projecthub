@@ -733,6 +733,12 @@ const dynamicBackground = {
     modalOverlay.hidden = true;
     modalClosable = true;
   }
+  document.addEventListener("click", (event) => {
+    if (event.target.closest && event.target.closest("#modal-close")) {
+      event.preventDefault();
+      hideModal();
+    }
+  }, true);
 
 function showThemeChooser() {
   const currentThemeId = document.documentElement.dataset.theme;
