@@ -725,11 +725,14 @@ const dynamicBackground = {
     modalClosable = closable !== false;
     modalContent.innerHTML = html;
     modalOverlay.hidden = false;
-    modalClose.style.display = "";
+    modalClose.style.display = modalClosable ? "" : "none";
     const box = modalContent;
     box.scrollTop = 0;
   }
-  function hideModal() { modalOverlay.hidden = true; }
+  function hideModal() {
+    modalOverlay.hidden = true;
+    modalClosable = true;
+  }
 
 function showThemeChooser() {
   const currentThemeId = document.documentElement.dataset.theme;
@@ -794,7 +797,7 @@ function showThemeChooser() {
         确认选择
       </button>
     </div>
-  `, false);
+  `, true);
 
   const options = modalContent.querySelectorAll(".theme-option");
   const confirmButton = modalContent.querySelector("#theme-confirm");
