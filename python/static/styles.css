@@ -1229,7 +1229,7 @@ em { font-style: normal; }
 
 .filter-icon-img { width: 17px; height: 17px; object-fit: contain; flex-shrink: 0; }
 .topic-direction .ui-icon { width: 14px; height: 14px; margin-right: 3px; }
-.modal-close .modal-close-icon { width: 16px; height: 16px; }
+.modal-close .modal-close-icon { width: 16px; height: 16px; pointer-events: none; }
 
 
 /* ===== Font Awesome 7 icon treatment ===== */
